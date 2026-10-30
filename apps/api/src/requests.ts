@@ -52,6 +52,7 @@ export async function processRequest(
   deps.db.setRequestStatus(requestId, "running");
 
   const outcome = await runAgent(goal, budget, { llm: deps.llm, channel3: deps.channel3 });
+  deps.db.setRequestTrace(requestId, outcome.trace);
 
   if (outcome.status !== "proposed" || outcome.proposal === null) {
     const lastTrace = outcome.trace.at(-1)?.text ?? null;

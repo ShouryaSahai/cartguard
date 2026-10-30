@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { DEFAULT_POLICY } from "@cartguard/shared";
 import type {
+  AgentStep,
   NormalizedProduct,
   PolicyConfig,
   PolicyReason,
@@ -26,6 +27,7 @@ export interface RequestRow {
   paypalOrderId: string | null;
   approvalUrl: string | null;
   createdAt: string;
+  trace: AgentStep[];
 }
 
 export interface AuditEntry {
@@ -57,6 +59,7 @@ export interface CartGuardDb {
     approvalUrl: string | null,
   ): void;
   getRequest(id: string): RequestRow | null;
+  setRequestTrace(id: string, trace: AgentStep[]): void;
   appendAudit(entry: AuditEntry): void;
   auditForRequest(requestId: string): AuditRow[];
   listAudit(limit: number): AuditRow[];
@@ -77,6 +80,7 @@ function table(db: DatabaseSync): void {
       chosen_product_json TEXT,
       paypal_order_id TEXT,
       approval_url TEXT,
+      trace_json TEXT,
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS audit (
@@ -105,6 +109,12 @@ function table(db: DatabaseSync): void {
 export function openDb(path: string): CartGuardDb {
   const db = new DatabaseSync(path);
   table(db);
+  // Lightweight migration for databases created before trace persistence.
+  try {
+    db.exec("ALTER TABLE requests ADD COLUMN trace_json TEXT");
+  } catch {
+    // Column already exists.
+  }
 
   return {
     createRequest(id: string, goal: string, budgetUsd: number): void {
@@ -145,6 +155,7 @@ export function openDb(path: string): CartGuardDb {
             chosen_product_json: string | null;
             paypal_order_id: string | null;
             approval_url: string | null;
+            trace_json: string | null;
             created_at: string;
           }
         | undefined;
@@ -161,7 +172,12 @@ export function openDb(path: string): CartGuardDb {
         paypalOrderId: row.paypal_order_id,
         approvalUrl: row.approval_url,
         createdAt: row.created_at,
+        trace: row.trace_json === null ? [] : (JSON.parse(row.trace_json) as AgentStep[]),
       };
+    },
+
+    setRequestTrace(id: string, trace: AgentStep[]): void {
+      db.prepare("UPDATE requests SET trace_json = ? WHERE id = ?").run(JSON.stringify(trace), id);
     },
 
     appendAudit(entry: AuditEntry): void {

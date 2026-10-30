@@ -1,0 +1,63 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --fg: #0b1220;
+  --muted: #5b6472;
+  --border: #e3e6ec;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --ok: #059669;
+  --warn: #b45309;
+  --danger: #dc2626;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #090d15;
+  --card: #0f1522;
+  --fg: #e8edf6;
+  --muted: #8b95a7;
+  --border: #202a3c;
+  --accent: #3b82f6;
+  --accent-fg: #ffffff;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg text-fg font-sans antialiased;
+  background-image: radial-gradient(
+    1200px 500px at 50% -10%,
+    color-mix(in oklab, var(--accent) 9%, transparent),
+    transparent
+  );
+}

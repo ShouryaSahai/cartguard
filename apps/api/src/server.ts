@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -184,6 +186,21 @@ export function createApp(deps: ServerDeps): Express {
     deps.db.putPolicy(parsed.data);
     res.json(parsed.data);
   });
+
+  // Serve the built web app when it exists, with an SPA fallback for
+  // client-side routes. API paths always fall through to the 404 handler.
+  const webDist = path.resolve(import.meta.dirname, "../../web/dist");
+  if (existsSync(webDist)) {
+    app.use(express.static(webDist));
+    app.use((req, res, next) => {
+      const apiPrefixes = ["/requests", "/audit", "/policy", "/health", "/paypal"];
+      if (req.method !== "GET" || apiPrefixes.some((prefix) => req.path.startsWith(prefix))) {
+        next();
+        return;
+      }
+      res.sendFile(join(webDist, "index.html"));
+    });
+  }
 
   app.use((_req, res) => {
     res.status(404).json({ error: "not_found" });
