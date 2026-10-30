@@ -24,29 +24,30 @@ export const Channel3PriceSchema = z.object({
 });
 
 export const Channel3OfferSchema = z.object({
-  url: z.string().optional(),
+  url: z.string().nullable().optional(),
   domain: z.string(),
   price: Channel3PriceSchema,
-  availability: z.string().optional(),
-  condition: z.string().optional(),
-  max_commission_rate: z.number().optional(),
+  availability: z.string().nullable().optional(),
+  condition: z.string().nullable().optional(),
+  max_commission_rate: z.number().nullable().optional(),
 });
 
 export const Channel3ProductSchema = z.object({
   id: z.string(),
   title: z.string(),
-  description: z.string().optional(),
-  brands: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
+  description: z.string().nullable().optional(),
+  brands: z.array(z.object({ id: z.string().nullable().optional(), name: z.string().nullable().optional() })).nullable().optional(),
   images: z
     .array(
       z.object({
-        url: z.string().optional(),
-        cleaned_url: z.string().optional(),
-        is_main_image: z.boolean().optional(),
-        shot_type: z.string().optional(),
-        alt_text: z.string().optional(),
+        url: z.string().nullable().optional(),
+        cleaned_url: z.string().nullable().optional(),
+        is_main_image: z.boolean().nullable().optional(),
+        shot_type: z.string().nullable().optional(),
+        alt_text: z.string().nullable().optional(),
       }),
     )
+    .nullable()
     .optional(),
   category: z
     .object({
@@ -55,20 +56,24 @@ export const Channel3ProductSchema = z.object({
       path: z.array(z.object({ slug: z.string(), title: z.string() })).optional(),
       has_children: z.boolean().optional(),
     })
+    .nullable()
     .optional(),
-  offers: z.array(Channel3OfferSchema).optional(),
+  offers: z.array(Channel3OfferSchema).nullable().optional(),
   ratings: z
     .object({
       value: z.number().optional(),
       count: z.number().optional(),
       source_count: z.number().optional(),
     })
+    .nullable()
     .optional(),
 });
 export type Channel3Product = z.infer<typeof Channel3ProductSchema>;
 
 export const Channel3SearchResponseSchema = z.object({
-  products: z.array(Channel3ProductSchema).default([]),
+  // Items are parsed one-by-one as strict Channel3ProductSchema downstream, so
+  // a single malformed product is skipped instead of failing the whole search.
+  products: z.array(z.unknown()).default([]),
   next_page_token: z.string().optional(),
 });
 
@@ -101,8 +106,9 @@ export type NormalizedProduct = z.infer<typeof NormalizedProductSchema>;
 const OUT_OF_STOCK_PATTERN =
   /out\s*_?\s*of\s*_?\s*stock|sold\s*_?\s*out|unavailable|discontinued/i;
 
-export function isInStock(availability: string | undefined): boolean {
-  if (availability === undefined || availability.trim() === "") return true;
+export function isInStock(availability: string | null | undefined): boolean {
+  if (availability === undefined || availability === null) return true;
+  if (availability.trim() === "") return true;
   return !OUT_OF_STOCK_PATTERN.test(availability);
 }
 
@@ -189,3 +195,46 @@ export const PolicyResultSchema = z.object({
   priceUsed: z.number(),
 });
 export type PolicyResult = z.infer<typeof PolicyResultSchema>;
+
+// ---------- Agent (LLM) contracts ----------
+
+export const PurchaseProposalSchema = z.object({
+  productId: z.string().min(1),
+  llmStatedPrice: z.number().nonnegative().nullable(),
+  rationale: z.string().min(1),
+  goalMatchScore: z.number().min(0).max(1),
+});
+export type PurchaseProposal = z.infer<typeof PurchaseProposalSchema>;
+
+export const AgentStepKindSchema = z.enum([
+  "assistant_text",
+  "tool_call",
+  "tool_result",
+  "proposal",
+  "error",
+]);
+export type AgentStepKind = z.infer<typeof AgentStepKindSchema>;
+
+export const AgentStepSchema = z.object({
+  step: z.number().int().nonnegative(),
+  kind: AgentStepKindSchema,
+  text: z.string(),
+});
+export type AgentStep = z.infer<typeof AgentStepSchema>;
+
+export const AgentStatusSchema = z.enum([
+  "proposed",
+  "no_proposal",
+  "no_products",
+  "max_steps_exceeded",
+]);
+export type AgentStatus = z.infer<typeof AgentStatusSchema>;
+
+export const AgentOutcomeSchema = z.object({
+  status: AgentStatusSchema,
+  proposal: PurchaseProposalSchema.nullable(),
+  productsSeen: z.array(NormalizedProductSchema),
+  searchMedianPrice: z.number().nullable(),
+  trace: z.array(AgentStepSchema),
+});
+export type AgentOutcome = z.infer<typeof AgentOutcomeSchema>;

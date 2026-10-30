@@ -66,16 +66,20 @@ export function createChannel3Client(options: Channel3ClientOptions = {}): Chann
     query: string,
     limit = 10,
   ): Promise<{ products: NormalizedProduct[]; nextPageToken: string | null }> {
-    const parsed = Channel3SearchResponseSchema.parse(
+    const envelope = Channel3SearchResponseSchema.parse(
       await request("/v1/search", {
         method: "POST",
         body: JSON.stringify({ query, limit }),
       }),
     );
-    return {
-      products: parsed.products.map(normalizeChannel3Product),
-      nextPageToken: parsed.next_page_token ?? null,
-    };
+    const products: NormalizedProduct[] = [];
+    for (const item of envelope.products) {
+      const parsed = Channel3ProductSchema.safeParse(item);
+      if (parsed.success) {
+        products.push(normalizeChannel3Product(parsed.data));
+      }
+    }
+    return { products, nextPageToken: envelope.next_page_token ?? null };
   }
 
   async function getProduct(id: string): Promise<NormalizedProduct | null> {
