@@ -9,7 +9,9 @@
     "dev": "tsx watch src/server.ts",
     "smoke:agent": "tsx scripts/smoke-agent.ts",
     "redteam": "tsx scripts/redteam.ts",
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "preflight": "tsx scripts/preflight.ts"
   },
   "dependencies": {
     "@cartguard/shared": "*",

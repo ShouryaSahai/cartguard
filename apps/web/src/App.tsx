@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { AuditGrid } from "./components/AuditGrid";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Header } from "./components/Header";
 import { NewRequestCard } from "./components/NewRequestCard";
 import { PolicyEditor } from "./components/PolicyEditor";
 import { RequestView } from "./components/RequestView";
 import { api } from "./lib/api";
-import { cn } from "./components/ui";
+import { cn, Spinner } from "./components/ui";
+
+// AG Grid is heavy — load it only when the audit tab is opened.
+const AuditGrid = lazy(async () => ({ default: await import("./components/AuditGrid").then((m) => m.AuditGrid) }));
 
 type Theme = "dark" | "light";
 type Tab = "audit" | "policy";
@@ -72,7 +74,19 @@ export function App() {
                 </button>
               ))}
             </div>
-            {tab === "audit" ? <AuditGrid refreshKey={auditKey} /> : <PolicyEditor />}
+            {tab === "audit" ? (
+              <Suspense
+                fallback={
+                  <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-4 text-sm text-muted">
+                    <Spinner className="text-accent" /> Loading audit log…
+                  </div>
+                }
+              >
+                <AuditGrid refreshKey={auditKey} />
+              </Suspense>
+            ) : (
+              <PolicyEditor />
+            )}
           </div>
         </div>
         <p className="pb-4 text-center text-xs text-muted">
