@@ -4,12 +4,24 @@
   "private": true,
   "type": "module",
   "description": "CartGuard — the trust layer for agent payments. LLM proposes, a deterministic policy engine decides.",
-  "workspaces": ["apps/*", "packages/*"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "npm run build -w @cartguard/shared",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run build -w @cartguard/shared && npm run test --workspaces --if-present"
   },
-  "devDependencies": { "typescript": "^5.9.2" }
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@paypal/paypal-server-sdk": "^2.5.0",
+    "express": "^5.3.0"
+  }
 }
