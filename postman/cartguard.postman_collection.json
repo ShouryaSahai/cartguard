@@ -1,0 +1,1105 @@
+{
+    "item": [
+        {
+            "name": "requests",
+            "description": "Shopping requests and their lifecycle",
+            "item": [
+                {
+                    "id": "dc275dbe-f8b7-4f97-8e9b-f1593b4437c2",
+                    "name": "Start a shopping request (agent runs in the background)",
+                    "request": {
+                        "name": "Start a shopping request (agent runs in the background)",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "requests"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"goal\": \"<string>\",\n  \"budget\": \"<number>\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "326008b0-f70e-4938-8f15-ca6db1311a05",
+                            "name": "Request accepted",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"goal\": \"<string>\",\n  \"budget\": \"<number>\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Created",
+                            "code": 201,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"<uuid>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "65c6db8f-f307-468f-8cb0-c28c40920936",
+                            "name": "Invalid body",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"goal\": \"<string>\",\n  \"budget\": \"<number>\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "d1603a09-93df-42e5-90a0-d0a5d5e78305",
+                    "name": "Status, reasoning trace, verdict, audit rows, approval link",
+                    "request": {
+                        "name": "Status, reasoning trace, verdict, audit rows, approval link",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "requests",
+                                ":id"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": [
+                                {
+                                    "type": "any",
+                                    "value": "<uuid>",
+                                    "key": "id",
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "(Required) ",
+                                        "type": "text/plain"
+                                    }
+                                }
+                            ]
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "dc58a2f0-f28c-4471-926e-1865084a90ea",
+                            "name": "Request detail",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests",
+                                        ":id"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "type": "any",
+                                            "value": "<uuid>",
+                                            "key": "id"
+                                        }
+                                    ]
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"request\": {\n    \"id\": \"<uuid>\",\n    \"goal\": \"<string>\",\n    \"budgetUsd\": \"<number>\",\n    \"status\": \"blocked\",\n    \"chosenProduct\": {},\n    \"paypalOrderId\": \"<string>\",\n    \"approvalUrl\": \"<string>\",\n    \"createdAt\": \"<dateTime>\",\n    \"trace\": [\n      {\n        \"step\": \"<integer>\",\n        \"kind\": \"tool_result\",\n        \"text\": \"<string>\"\n      },\n      {\n        \"step\": \"<integer>\",\n        \"kind\": \"error\",\n        \"text\": \"<string>\"\n      }\n    ]\n  },\n  \"audit\": [\n    {\n      \"id\": \"<integer>\",\n      \"requestId\": \"<uuid>\",\n      \"step\": \"pipeline\",\n      \"productId\": \"<string>\",\n      \"merchant\": \"<string>\",\n      \"priceUsd\": \"<number>\",\n      \"verdict\": \"<string>\",\n      \"reasons\": [\n        {\n          \"rule\": \"<string>\",\n          \"outcome\": \"blocked\",\n          \"message\": \"<string>\"\n        },\n        {\n          \"rule\": \"<string>\",\n          \"outcome\": \"auto_pay\",\n          \"message\": \"<string>\"\n        }\n      ],\n      \"llmRationale\": \"<string>\",\n      \"paypalOrderId\": \"<string>\",\n      \"paypalStatus\": \"<string>\",\n      \"ts\": \"<dateTime>\"\n    },\n    {\n      \"id\": \"<integer>\",\n      \"requestId\": \"<uuid>\",\n      \"step\": \"payment\",\n      \"productId\": \"<string>\",\n      \"merchant\": \"<string>\",\n      \"priceUsd\": \"<number>\",\n      \"verdict\": \"<string>\",\n      \"reasons\": [\n        {\n          \"rule\": \"<string>\",\n          \"outcome\": \"needs_approval\",\n          \"message\": \"<string>\"\n        },\n        {\n          \"rule\": \"<string>\",\n          \"outcome\": \"needs_approval\",\n          \"message\": \"<string>\"\n        }\n      ],\n      \"llmRationale\": \"<string>\",\n      \"paypalOrderId\": \"<string>\",\n      \"paypalStatus\": \"<string>\",\n      \"ts\": \"<dateTime>\"\n    }\n  ],\n  \"approvalUrl\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "d552448c-cfc1-457f-9926-a531f65c2f94",
+                            "name": "Unknown request",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests",
+                                        ":id"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "type": "any",
+                                            "value": "<uuid>",
+                                            "key": "id"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "7bbc80a9-6d43-4f85-a79c-389a7ebaca1e",
+                    "name": "Human approval — capture the prepared PayPal order",
+                    "request": {
+                        "name": "Human approval — capture the prepared PayPal order",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "requests",
+                                ":id",
+                                "approve"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": [
+                                {
+                                    "type": "any",
+                                    "value": "<uuid>",
+                                    "key": "id",
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "(Required) ",
+                                        "type": "text/plain"
+                                    }
+                                }
+                            ]
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "POST",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "bcaf9ecb-1a88-44cb-a471-dd891e26f0bf",
+                            "name": "Capture attempted",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests",
+                                        ":id",
+                                        "approve"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "type": "any",
+                                            "value": "<uuid>",
+                                            "key": "id"
+                                        }
+                                    ]
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "POST",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"id\": \"<string>\",\n  \"status\": \"failed\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "bffcb589-a602-4873-9ca3-cc4637883661",
+                            "name": "Request is not in needs_approval state",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests",
+                                        ":id",
+                                        "approve"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "type": "any",
+                                            "value": "<uuid>",
+                                            "key": "id"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "body": {}
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        },
+                        {
+                            "id": "a0a07d95-9a30-47d4-bf8a-6ff8e5b0a480",
+                            "name": "PayPal capture failed",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests",
+                                        ":id",
+                                        "approve"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "type": "any",
+                                            "value": "<uuid>",
+                                            "key": "id"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "body": {}
+                            },
+                            "status": "Bad Gateway",
+                            "code": 502,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "4df41fc9-80ac-4514-b843-f0ef5b926a58",
+                    "name": "Human rejection — nothing is purchased",
+                    "request": {
+                        "name": "Human rejection — nothing is purchased",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "requests",
+                                ":id",
+                                "reject"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": [
+                                {
+                                    "type": "any",
+                                    "value": "<uuid>",
+                                    "key": "id",
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "(Required) ",
+                                        "type": "text/plain"
+                                    }
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "9c6cacdc-324c-4144-a8f4-d7f41665a1f9",
+                            "name": "Rejected",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests",
+                                        ":id",
+                                        "reject"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "type": "any",
+                                            "value": "<uuid>",
+                                            "key": "id"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        },
+                        {
+                            "id": "d954da4e-28db-4166-9544-c0c225fa1037",
+                            "name": "Request is not in needs_approval state",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "requests",
+                                        ":id",
+                                        "reject"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "type": "any",
+                                            "value": "<uuid>",
+                                            "key": "id"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "body": {}
+                            },
+                            "status": "Conflict",
+                            "code": 409,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "audit",
+            "description": "Decision audit log (AG Grid feed)",
+            "item": [
+                {
+                    "id": "ab4a2a4e-537b-435d-9a10-c2cbb4099e8f",
+                    "name": "Decision audit rows for the AG Grid",
+                    "request": {
+                        "name": "Decision audit rows for the AG Grid",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "audit"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "limit",
+                                    "value": "200"
+                                }
+                            ],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "ff68dd06-ac7b-49f4-9cc5-3bd1156aacaf",
+                            "name": "Audit rows, newest first",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "audit"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "limit",
+                                            "value": "200"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"rows\": [\n    {\n      \"id\": \"<integer>\",\n      \"requestId\": \"<uuid>\",\n      \"step\": \"agent\",\n      \"productId\": \"<string>\",\n      \"merchant\": \"<string>\",\n      \"priceUsd\": \"<number>\",\n      \"verdict\": \"<string>\",\n      \"reasons\": [\n        {\n          \"rule\": \"<string>\",\n          \"outcome\": \"auto_pay\",\n          \"message\": \"<string>\"\n        },\n        {\n          \"rule\": \"<string>\",\n          \"outcome\": \"needs_approval\",\n          \"message\": \"<string>\"\n        }\n      ],\n      \"llmRationale\": \"<string>\",\n      \"paypalOrderId\": \"<string>\",\n      \"paypalStatus\": \"<string>\",\n      \"ts\": \"<dateTime>\"\n    },\n    {\n      \"id\": \"<integer>\",\n      \"requestId\": \"<uuid>\",\n      \"step\": \"payment\",\n      \"productId\": \"<string>\",\n      \"merchant\": \"<string>\",\n      \"priceUsd\": \"<number>\",\n      \"verdict\": \"<string>\",\n      \"reasons\": [\n        {\n          \"rule\": \"<string>\",\n          \"outcome\": \"blocked\",\n          \"message\": \"<string>\"\n        },\n        {\n          \"rule\": \"<string>\",\n          \"outcome\": \"needs_approval\",\n          \"message\": \"<string>\"\n        }\n      ],\n      \"llmRationale\": \"<string>\",\n      \"paypalOrderId\": \"<string>\",\n      \"paypalStatus\": \"<string>\",\n      \"ts\": \"<dateTime>\"\n    }\n  ]\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "policy",
+            "description": "User-controlled spending policy",
+            "item": [
+                {
+                    "id": "bf44b80b-d2e6-481a-928f-35bcaa85cac2",
+                    "name": "Current spending policy",
+                    "request": {
+                        "name": "Current spending policy",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "policy"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "e9880809-4ed2-4140-a46e-6eda15520a34",
+                            "name": "Policy config",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "policy"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"perPurchaseCap\": \"<number>\",\n  \"weeklyCap\": \"<number>\",\n  \"allowlistMerchants\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"blocklistCategories\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"priceMultiplierHigh\": \"<number>\",\n  \"priceMultiplierLow\": \"<number>\",\n  \"goalMatchThreshold\": \"<number>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "d354591f-d3c9-4ee4-bb00-78563ae3fb2c",
+                    "name": "Replace the spending policy (validated)",
+                    "request": {
+                        "name": "Replace the spending policy (validated)",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "policy"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "PUT",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"perPurchaseCap\": \"<number>\",\n  \"weeklyCap\": \"<number>\",\n  \"allowlistMerchants\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"blocklistCategories\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"priceMultiplierHigh\": \"<number>\",\n  \"priceMultiplierLow\": \"<number>\",\n  \"goalMatchThreshold\": \"<number>\"\n}",
+                            "options": {
+                                "raw": {
+                                    "headerFamily": "json",
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "208db55b-2dbd-4cf0-a58a-60ebc9cbeb03",
+                            "name": "Stored policy",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "policy"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "PUT",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"perPurchaseCap\": \"<number>\",\n  \"weeklyCap\": \"<number>\",\n  \"allowlistMerchants\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"blocklistCategories\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"priceMultiplierHigh\": \"<number>\",\n  \"priceMultiplierLow\": \"<number>\",\n  \"goalMatchThreshold\": \"<number>\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        },
+                        {
+                            "id": "05901b83-5237-4c1b-8a95-f14686b0978f",
+                            "name": "Invalid policy",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "policy"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "PUT",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n  \"perPurchaseCap\": \"<number>\",\n  \"weeklyCap\": \"<number>\",\n  \"allowlistMerchants\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"blocklistCategories\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"priceMultiplierHigh\": \"<number>\",\n  \"priceMultiplierLow\": \"<number>\",\n  \"goalMatchThreshold\": \"<number>\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "headerFamily": "json",
+                                            "language": "json"
+                                        }
+                                    }
+                                }
+                            },
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "paypal",
+            "description": "PayPal sandbox return flow",
+            "item": [
+                {
+                    "id": "18046bd7-bb9e-4b88-8f14-e8a29831949f",
+                    "name": "PayPal redirects the sandbox buyer here after approval; captures the order",
+                    "request": {
+                        "name": "PayPal redirects the sandbox buyer here after approval; captures the order",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "paypal",
+                                "return"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "(Required) ",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "request_id",
+                                    "value": "<uuid>"
+                                },
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "PayPal order id echoed back on return",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "token",
+                                    "value": "<string>"
+                                }
+                            ],
+                            "variable": []
+                        },
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "05519883-aa55-45a5-85bc-2d6f3aaa708d",
+                            "name": "HTML redirect page back to the app",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "paypal",
+                                        "return"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "request_id",
+                                            "value": "<uuid>"
+                                        },
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "PayPal order id echoed back on return",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "token",
+                                            "value": "<string>"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        },
+                        {
+                            "id": "28bbca63-418e-4e62-91f2-796a24b1c620",
+                            "name": "Unknown request",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "paypal",
+                                        "return"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "request_id",
+                                            "value": "<uuid>"
+                                        },
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "PayPal order id echoed back on return",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "token",
+                                            "value": "<string>"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        },
+                        {
+                            "id": "3dcd8702-a6e3-4d2b-b869-41c2649dd6e7",
+                            "name": "Capture failed",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "paypal",
+                                        "return"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) ",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "request_id",
+                                            "value": "<uuid>"
+                                        },
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "PayPal order id echoed back on return",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "token",
+                                            "value": "<string>"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Bad Gateway",
+                            "code": 502,
+                            "header": [],
+                            "cookie": [],
+                            "_postman_previewlanguage": "text"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "health",
+            "description": "",
+            "item": [
+                {
+                    "id": "e5cb103a-e5af-4886-9ea5-4e3f1d467db9",
+                    "name": "Liveness and payment-rail status",
+                    "request": {
+                        "name": "Liveness and payment-rail status",
+                        "description": {},
+                        "url": {
+                            "path": [
+                                "health"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "47f86a70-0ea7-45f5-97b7-e6eb2d97034a",
+                            "name": "OK",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "health"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"ok\": \"<boolean>\",\n  \"paypal\": \"configured\",\n  \"time\": \"<dateTime>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        }
+    ],
+    "event": [],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:3000"
+        }
+    ],
+    "info": {
+        "_postman_id": "a07d5b3c-3e6c-4845-92d9-8fda2ebaa633",
+        "name": "CartGuard API",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "description": {
+            "content": "The trust layer for agent payments. The LLM proposes a purchase, a deterministic policy gate decides, and every decision is logged. No agent or model can reach PayPal except through the gate's verdict or an explicit human approval.",
+            "type": "text/plain"
+        }
+    }
+}

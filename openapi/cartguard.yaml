@@ -1,0 +1,255 @@
+openapi: 3.1.0
+info:
+  title: CartGuard API
+  version: 1.0.0
+  description: >-
+    The trust layer for agent payments. The LLM proposes a purchase, a
+    deterministic policy gate decides, and every decision is logged. No agent
+    or model can reach PayPal except through the gate's verdict or an explicit
+    human approval.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://cartguard.onrender.com
+    description: Production (sandbox payments only)
+tags:
+  - name: requests
+    description: Shopping requests and their lifecycle
+  - name: audit
+    description: Decision audit log (AG Grid feed)
+  - name: policy
+    description: User-controlled spending policy
+  - name: paypal
+    description: PayPal sandbox return flow
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Liveness and payment-rail status
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  paypal: { type: string, enum: [configured, unavailable] }
+                  time: { type: string, format: date-time }
+  /requests:
+    post:
+      tags: [requests]
+      summary: Start a shopping request (agent runs in the background)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [goal, budget]
+              properties:
+                goal:
+                  type: string
+                  minLength: 3
+                  maxLength: 500
+                  example: Wireless earbuds under $60 with good reviews
+                budget:
+                  type: number
+                  exclusiveMinimum: 0
+                  example: 60
+      responses:
+        "201":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+        "400":
+          description: Invalid body
+  /requests/{id}:
+    get:
+      tags: [requests]
+      summary: Status, reasoning trace, verdict, audit rows, approval link
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Request detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestDetail"
+        "404":
+          description: Unknown request
+  /requests/{id}/approve:
+    post:
+      tags: [requests]
+      summary: Human approval — capture the prepared PayPal order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Capture attempted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string, enum: [captured, failed] }
+        "409":
+          description: Request is not in needs_approval state
+        "502":
+          description: PayPal capture failed
+  /requests/{id}/reject:
+    post:
+      tags: [requests]
+      summary: Human rejection — nothing is purchased
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Rejected
+        "409":
+          description: Request is not in needs_approval state
+  /paypal/return:
+    get:
+      tags: [paypal]
+      summary: PayPal redirects the sandbox buyer here after approval; captures the order
+      parameters:
+        - name: request_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: token
+          in: query
+          schema: { type: string }
+          description: PayPal order id echoed back on return
+      responses:
+        "200":
+          description: HTML redirect page back to the app
+        "404":
+          description: Unknown request
+        "502":
+          description: Capture failed
+  /audit:
+    get:
+      tags: [audit]
+      summary: Decision audit rows for the AG Grid
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 200, maximum: 1000 }
+      responses:
+        "200":
+          description: Audit rows, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditRow"
+  /policy:
+    get:
+      tags: [policy]
+      summary: Current spending policy
+      responses:
+        "200":
+          description: Policy config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyConfig"
+    put:
+      tags: [policy]
+      summary: Replace the spending policy (validated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyConfig"
+      responses:
+        "200":
+          description: Stored policy
+        "400":
+          description: Invalid policy
+components:
+  schemas:
+    PolicyConfig:
+      type: object
+      required: [perPurchaseCap, weeklyCap]
+      properties:
+        perPurchaseCap: { type: number, example: 100 }
+        weeklyCap: { type: number, example: 500 }
+        allowlistMerchants: { type: array, items: { type: string } }
+        blocklistCategories: { type: array, items: { type: string } }
+        priceMultiplierHigh: { type: number, example: 1.5 }
+        priceMultiplierLow: { type: number, example: 0.4 }
+        goalMatchThreshold: { type: number, example: 0.6 }
+    PolicyReason:
+      type: object
+      properties:
+        rule: { type: string, example: per_purchase_cap }
+        outcome: { type: string, enum: [auto_pay, needs_approval, blocked] }
+        message: { type: string }
+    AuditRow:
+      type: object
+      properties:
+        id: { type: integer }
+        requestId: { type: string, format: uuid }
+        step: { type: string, enum: [agent, gate, payment, pipeline] }
+        productId: { type: string, nullable: true }
+        merchant: { type: string, nullable: true }
+        priceUsd: { type: number, nullable: true }
+        verdict: { type: string }
+        reasons:
+          type: array
+          items: { $ref: "#/components/schemas/PolicyReason" }
+        llmRationale: { type: string, nullable: true }
+        paypalOrderId: { type: string, nullable: true }
+        paypalStatus: { type: string, nullable: true }
+        ts: { type: string, format: date-time }
+    RequestDetail:
+      type: object
+      properties:
+        request:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            goal: { type: string }
+            budgetUsd: { type: number }
+            status:
+              type: string
+              enum: [queued, running, captured, needs_approval, rejected, blocked, failed]
+            chosenProduct: { type: object, nullable: true }
+            paypalOrderId: { type: string, nullable: true }
+            approvalUrl: { type: string, nullable: true }
+            createdAt: { type: string, format: date-time }
+            trace:
+              type: array
+              items:
+                type: object
+                properties:
+                  step: { type: integer }
+                  kind: { type: string, enum: [assistant_text, tool_call, tool_result, proposal, error] }
+                  text: { type: string }
+        audit:
+          type: array
+          items: { $ref: "#/components/schemas/AuditRow" }
+        approvalUrl: { type: string, nullable: true }

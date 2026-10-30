@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "CartGuard — the trust layer for agent payments. LLM proposes, a deterministic policy engine decides.",
+  "description": "CartGuard \u2014 the trust layer for agent payments. LLM proposes, a deterministic policy engine decides.",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -12,7 +12,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build -w @cartguard/shared",
+    "build": "npm run build -w @cartguard/shared && npm run build -w @cartguard/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run build -w @cartguard/shared && npm run test --workspaces --if-present"
   },

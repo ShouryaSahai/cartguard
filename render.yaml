@@ -1,0 +1,32 @@
+# CartGuard — Render blueprint (https://render.com/docs/blueprint-spec)
+# Deploy: push this repo to GitHub, then "New +" -> "Blueprint" in Render.
+# Fill the sync:false secrets in the Render dashboard after the first deploy.
+services:
+  - type: web
+    name: cartguard
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start -w @cartguard/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "26"
+      - key: PAYPAL_API_BASE
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: CHANNEL3_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: LLM_MODEL
+        value: gemini-3.5-flash-lite
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: DB_PATH
+        value: /tmp/cartguard.sqlite

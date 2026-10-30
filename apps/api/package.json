@@ -7,7 +7,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "tsx watch src/server.ts",
-    "smoke:agent": "tsx scripts/smoke-agent.ts"
+    "smoke:agent": "tsx scripts/smoke-agent.ts",
+    "redteam": "tsx scripts/redteam.ts",
+    "start": "tsx src/server.ts"
   },
   "dependencies": {
     "@cartguard/shared": "*",
