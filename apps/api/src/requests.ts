@@ -153,6 +153,27 @@ export async function processRequest(
     });
 
     if (decision.verdict === "auto_pay") {
+      // A charge against a saved vault token can come back COMPLETED straight
+      // from createOrder — no capture call, no buyer interaction.
+      if (order.status === "COMPLETED") {
+        await rememberVaultToken(deps, order.orderId);
+        deps.db.finishRequest(requestId, "captured", verified, order.orderId, null);
+        deps.db.appendAudit({
+          requestId,
+          step: "payment",
+          productId: verified?.id ?? null,
+          merchant: verified?.bestOffer?.domain ?? null,
+          priceUsd: decision.priceUsed,
+          verdict: "auto_pay",
+          reasons: [],
+          llmRationale: savedVaultId !== undefined
+            ? "Vault token charge completed at order creation — no capture call needed."
+            : proposal.rationale,
+          paypalOrderId: order.orderId,
+          paypalStatus: "CAPTURED",
+        });
+        return;
+      }
       try {
         const capture = await deps.paypal.captureOrder(order.orderId);
         if (capture.status === "COMPLETED") {

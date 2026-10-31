@@ -61,7 +61,9 @@ interface FakePaypalState {
   captures: string[];
 }
 
-function fakePaypal(): PaypalOrders & FakePaypalState {
+function fakePaypal(
+  options: { createStatus?: string } = {},
+): PaypalOrders & FakePaypalState {
   const state: FakePaypalState = { creates: [], captures: [] };
   return {
     creates: state.creates,
@@ -70,7 +72,7 @@ function fakePaypal(): PaypalOrders & FakePaypalState {
       state.creates.push({ amountUsd: params.amountUsd, vaultId: params.vaultId });
       return {
         orderId: `ORD-${state.creates.length}`,
-        status: "APPROVED",
+        status: options.createStatus ?? "APPROVED",
         approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=ORD-X",
       };
     },
@@ -78,7 +80,10 @@ function fakePaypal(): PaypalOrders & FakePaypalState {
       state.captures.push(orderId);
       return { orderId, status: "COMPLETED" };
     },
-    getVaultId: async () => (state.captures.length > 0 ? "VAULT-TOKEN-001" : null),
+    getVaultId: async () =>
+      state.captures.length > 0 || options.createStatus === "COMPLETED"
+        ? "VAULT-TOKEN-001"
+        : null,
   };
 }
 
@@ -223,6 +228,21 @@ describe("server: the three demo paths", () => {
     expect(data.status).toBe("rejected");
     const paypalFake = harness.deps.paypal as PaypalOrders & { captures: string[] };
     expect(paypalFake.captures.length).toBe(0);
+  });
+
+  it("vault: COMPLETED-on-create is recorded as captured without any capture call", async () => {
+    const harness = await startServer({ paypal: fakePaypal({ createStatus: "COMPLETED" }) });
+    const config = harness.db.getPolicy();
+    harness.db.putPolicy({ ...config, perPurchaseCap: 100 });
+    const { id } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
+    expect((await waitForStatus(harness.baseUrl, id)).status).toBe("captured");
+    const paypalFake = harness.deps.paypal as PaypalOrders & FakePaypalState;
+    expect(paypalFake.creates.length).toBe(1);
+    expect(paypalFake.captures.length).toBe(0);
+    const detail = (await (await fetch(`${harness.baseUrl}/requests/${id}`)).json()) as {
+      audit: Array<{ step: string; paypalStatus: string | null }>;
+    };
+    expect(detail.audit.some((row) => row.step === "payment" && row.paypalStatus === "CAPTURED")).toBe(true);
   });
 
   it("vault: after one approval, later auto_pay purchases charge the saved token", async () => {
