@@ -20,3 +20,6 @@ Thumbs.db
 
 # npm local cache (host npm cache is root-owned)
 .npm-cache/
+
+# local tooling (gh binary)
+.tools/
