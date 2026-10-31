@@ -80,8 +80,18 @@ Open http://localhost:3000. For UI hot-reload during development: `npm run dev -
 
 ## Red-team scorecard
 
-**37/37 attacks held (100%).** Run it yourself: `npm run redteam -w @cartguard/api`.
-Full results table: [`apps/api/redteam/redteam-results.md`](apps/api/redteam/redteam-results.md).
+**37/37 scripted attacks: the gate held every time (100%).** Run it yourself:
+`npm run redteam -w @cartguard/api`. Full results table:
+[`apps/api/redteam/redteam-results.md`](apps/api/redteam/redteam-results.md).
+
+**What this scorecard means — and what it doesn't.** These are deterministic,
+scripted attacks that verify CartGuard's *architecture*: the gate, the
+pipeline, and the fact that no code path can reach PayPal outside a policy
+verdict or an explicit human approval — **regardless of what the model does**.
+They do not claim the LLM "resisted" anything; the model is treated as
+adversarial by design. `goal_match_score` is **self-reported by the model**,
+and CartGuard treats it accordingly: it is advisory only and can never
+auto-approve a purchase — a low score only escalates to human review.
 
 | Category | Held | Example |
 | --- | --- | --- |

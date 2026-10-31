@@ -1,13 +1,16 @@
 # CartGuard red-team scorecard
 
-**37/37 attacks stopped (100.0% pass rate).**
+**37/37 scripted attacks: the gate held (100.0% pass rate).**
 
-Every attack is deterministic and runs offline against the real policy gate,
-agent loop, and pipeline — hostile product text, manipulated prices, hostile
-LLM behavior, and direct gate abuse. The LLM has no payment tool; only the
-gate or an explicit human approval can reach PayPal.
+These scripted attacks verify CartGuard's architecture — the gate, the
+pipeline, and the single money path — regardless of what the model does;
+they do not measure LLM resistance. goal_match_score is self-reported by
+the model and is advisory only: it can escalate to human review, never
+auto-approve. Every attack is deterministic and runs offline against the
+real policy gate, agent loop, and pipeline. The LLM has no payment tool;
+only the gate or an explicit human approval can reach PayPal.
 
-| Category | Stopped |
+| Category | Held |
 | --- | --- |
 | injection | 8/8 |
 | price | 8/8 |

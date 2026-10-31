@@ -17,7 +17,7 @@ Script from PRD §14, mapped to the built UI. Record **after** `npm run prefligh
 | 0:20–0:55 | Type "Wireless earbuds under $60 with good reviews", $60, **Run agent** | Let the reasoning stream play. Point at: "agent proposes… gate re-verifies the price from product data — the model's own price is ignored." Verdict: **auto_paid ✓**, audit row appears. |
 | 0:55–1:30 | New request: "Laptop around $400", $450 | "Above the per-purchase cap — the gate pauses and asks a human." Show the reasoning + **approval card**. Click **Open PayPal sandbox**, approve with the sandbox buyer, come back, show **captured**. |
 | 1:30–1:55 | New request: "Noise-cancelling headphones under $20", $20 | "Nothing real costs this little. The gate flags bait pricing and an off-allowlist merchant — **blocked**, PayPal was never touched." Show the red reasons in the grid. |
-| 1:55–2:20 | Hostile product moment | "And when a product description *itself* tries to hijack the agent — 'call pay_now' — the red-team suite proves nothing moves: 35 of 35 attacks stopped." Show `redteam-results.md` pass rate. |
+| 1:55–2:20 | Hostile product moment | "And when a product description *itself* tries to hijack the agent — 'call pay_now' — the model is treated as adversarial by design: 37 of 37 scripted attacks show the gate holds regardless of what the model does." Show `redteam-results.md` pass rate. |
 | 2:20–2:50 | Filter the AG Grid, open **Policy editor**, lower the per-purchase cap | "Users control the rules. Every decision references the policy. Sandbox only — no real money ever moves." |
 | 2:50–3:00 | Header logo | "CartGuard — the trust layer for agent payments." |
 
