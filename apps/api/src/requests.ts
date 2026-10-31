@@ -4,6 +4,7 @@ import type { CartGuardDb, RequestStatus } from "./db.js";
 import type { Channel3Client } from "./channel3.js";
 import type { ChatCompleter } from "./llm.js";
 import type { PaypalOrders } from "./paypal.js";
+import type { PolicyReason, PurchaseProposal, Verdict } from "@cartguard/shared";
 
 export interface PipelineDeps {
   db: CartGuardDb;
@@ -14,6 +15,17 @@ export interface PipelineDeps {
   paypal: PaypalOrders | null;
   publicBaseUrl: string;
   brandName: string;
+}
+
+/** Outcome of running a verified proposal through the gate + payment rail. */
+export interface GateExecutionResult {
+  status: RequestStatus;
+  verdict: Verdict;
+  reasons: PolicyReason[];
+  priceUsed: number;
+  approvalUrl: string | null;
+  paypalOrderId: string | null;
+  productId: string | null;
 }
 
 function errorMessage(error: unknown): string {
@@ -84,7 +96,19 @@ export async function processRequest(
     return;
   }
 
-  const proposal = outcome.proposal;
+  await executeProposal(deps, requestId, goal, budget, outcome.proposal, outcome.searchMedianPrice);
+}
+
+/** The gate + payment execution shared by the internal agent pipeline and the
+ * external gate API (POST /gate/propose). ONE code path to PayPal. */
+export async function executeProposal(
+  deps: PipelineDeps,
+  requestId: string,
+  goal: string,
+  budget: number,
+  proposal: PurchaseProposal,
+  searchMedianPrice: number | null,
+): Promise<GateExecutionResult> {
   const config = deps.db.getPolicy();
   const decision = await decidePurchase(
     {
@@ -92,7 +116,7 @@ export async function processRequest(
       budget,
       proposal,
       spentThisWeek: deps.db.weeklyCapturedSpend(new Date()),
-      searchMedianPrice: outcome.searchMedianPrice,
+      searchMedianPrice,
       config,
     },
     { channel3: deps.channel3 },
@@ -114,7 +138,7 @@ export async function processRequest(
 
   if (decision.verdict === "blocked") {
     deps.db.finishRequest(requestId, "blocked", verified, null, null);
-    return;
+    return { status: "blocked", verdict: decision.verdict, reasons: decision.reasons, priceUsed: decision.priceUsed, approvalUrl: null, paypalOrderId: null, productId: verified?.id ?? proposal.productId };
   }
 
   // From here on, only the gate's approval stands between the proposal and
@@ -133,13 +157,12 @@ export async function processRequest(
       paypalOrderId: null,
       paypalStatus: "UNAVAILABLE",
     });
-    return;
+    return { status: "needs_approval", verdict: "needs_approval", reasons: [], priceUsed: decision.priceUsed, approvalUrl: null, paypalOrderId: null, productId: verified?.id ?? null };
   }
 
   const returnUrl = `${deps.publicBaseUrl}/paypal/return?request_id=${encodeURIComponent(requestId)}`;
   const cancelUrl = `${deps.publicBaseUrl}/?canceled=${encodeURIComponent(requestId)}`;
   const vaultOnSuccess = decision.verdict === "auto_pay";
-  // A saved token (from a previous vaulted approval) enables true no-click pay.
   const savedVaultId = vaultOnSuccess ? (deps.db.getSetting("paypal_vault_id") ?? undefined) : undefined;
 
   try {
@@ -153,8 +176,6 @@ export async function processRequest(
     });
 
     if (decision.verdict === "auto_pay") {
-      // A charge against a saved vault token can come back COMPLETED straight
-      // from createOrder — no capture call, no buyer interaction.
       if (order.status === "COMPLETED") {
         await rememberVaultToken(deps, order.orderId);
         deps.db.finishRequest(requestId, "captured", verified, order.orderId, null);
@@ -172,7 +193,7 @@ export async function processRequest(
           paypalOrderId: order.orderId,
           paypalStatus: "CAPTURED",
         });
-        return;
+        return { status: "captured", verdict: "auto_pay", reasons: [], priceUsed: decision.priceUsed, approvalUrl: null, paypalOrderId: order.orderId, productId: verified?.id ?? null };
       }
       try {
         const capture = await deps.paypal.captureOrder(order.orderId);
@@ -193,7 +214,7 @@ export async function processRequest(
             paypalOrderId: order.orderId,
             paypalStatus: "CAPTURED",
           });
-          return;
+          return { status: "captured", verdict: "auto_pay", reasons: [], priceUsed: decision.priceUsed, approvalUrl: null, paypalOrderId: order.orderId, productId: verified?.id ?? null };
         }
         deps.db.finishRequest(requestId, "needs_approval", verified, order.orderId, order.approvalUrl);
         deps.db.appendAudit({
@@ -208,10 +229,8 @@ export async function processRequest(
           paypalOrderId: order.orderId,
           paypalStatus: capture.status,
         });
-        return;
+        return { status: "needs_approval", verdict: "needs_approval", reasons: [], priceUsed: decision.priceUsed, approvalUrl: order.approvalUrl, paypalOrderId: order.orderId, productId: verified?.id ?? null };
       } catch (captureError: unknown) {
-        // PRD fallback: sandbox wallet orders need buyer approval unless a
-        // vaulted token exists. auto_pay degrades to one-click approval.
         deps.db.finishRequest(requestId, "needs_approval", verified, order.orderId, order.approvalUrl);
         deps.db.appendAudit({
           requestId,
@@ -225,7 +244,7 @@ export async function processRequest(
           paypalOrderId: order.orderId,
           paypalStatus: "APPROVAL_REQUIRED",
         });
-        return;
+        return { status: "needs_approval", verdict: "needs_approval", reasons: [], priceUsed: decision.priceUsed, approvalUrl: order.approvalUrl, paypalOrderId: order.orderId, productId: verified?.id ?? null };
       }
     }
 
@@ -242,9 +261,9 @@ export async function processRequest(
       paypalOrderId: order.orderId,
       paypalStatus: "CREATED",
     });
+    return { status: "needs_approval", verdict: "needs_approval", reasons: [], priceUsed: decision.priceUsed, approvalUrl: order.approvalUrl, paypalOrderId: order.orderId, productId: verified?.id ?? null };
   } catch (createError: unknown) {
-    const status: RequestStatus = "failed";
-    deps.db.finishRequest(requestId, status, verified, null, null);
+    deps.db.finishRequest(requestId, "failed", verified, null, null);
     deps.db.appendAudit({
       requestId,
       step: "payment",
@@ -258,4 +277,5 @@ export async function processRequest(
       paypalStatus: null,
     });
   }
+  return { status: "failed", verdict: "failed" as Verdict, reasons: [] as PolicyReason[], priceUsed: decision.priceUsed, approvalUrl: null, paypalOrderId: null, productId: verified?.id ?? null };
 }

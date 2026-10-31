@@ -73,14 +73,14 @@ Open http://localhost:3000. For UI hot-reload during development: `npm run dev -
 | --- | --- |
 | `npm test` | 65 offline tests (policy, gate, agent, Channel3 client, full HTTP API) |
 | `npm run typecheck` | strict TypeScript across all workspaces |
-| `npm run redteam -w @cartguard/api` | 37-attack red-team scorecard (offline) |
+| `npm run redteam -w @cartguard/api` | 42-attack red-team scorecard (offline) |
 | `npm run smoke:agent -w @cartguard/api` | live agent loop: real LLM + real product data, no money path |
 | `npm run build` | shared contracts + production web bundle |
 | `npm run start -w @cartguard/api` | serve API + built UI (single deploy) |
 
 ## Red-team scorecard
 
-**37/37 scripted attacks: the gate held every time (100%).** Run it yourself:
+**42/42 scripted attacks: the gate held every time (100%).** Run it yourself:
 `npm run redteam -w @cartguard/api`. Full results table:
 [`apps/api/redteam/redteam-results.md`](apps/api/redteam/redteam-results.md).
 
@@ -102,6 +102,7 @@ auto-approve a purchase — a low score only escalates to human review.
 | merchant & category | 4/4 | blocklist survives case games ("WEAPONS") |
 | budget & caps | 5/5 | weekly accumulation triggers approval on the next purchase |
 | gate hardening | 6/6 | unverifiable product id → blocked; hostile LLM `pay_now` call → zero extra PayPal traffic |
+| gate API (external agents) | 5/5 | missing/wrong API key → 401; price spoof, non-USD, replay → every call re-gated |
 
 The headline attack: **even when a scripted hostile model obeys an injected
 instruction and tries to call `pay_now`, nothing in the stack can move money** —

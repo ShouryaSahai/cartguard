@@ -15,7 +15,7 @@ import { createLlmCompleter, type ChatCompleter } from "./llm.js";
 import { createMockChannel3, createMockLlm, createMockPaypal } from "./mockRails.js";
 import { seedDemoData } from "./demoSeedData.js";
 import { createPaypalOrdersFromEnv, type PaypalOrders } from "./paypal.js";
-import { rememberVaultToken, startRequestProcessing } from "./requests.js";
+import { executeProposal, rememberVaultToken, startRequestProcessing } from "./requests.js";
 
 export interface ServerDeps {
   db: CartGuardDb;
@@ -25,6 +25,18 @@ export interface ServerDeps {
   publicBaseUrl: string;
   brandName: string;
 }
+
+const GateProposeSchema = z.object({
+  goal: z.string().min(1).max(500),
+  budget: z.number().positive().max(1_000_000),
+  search_median_price: z.number().positive().nullable().optional(),
+  proposal: z.object({
+    product_id: z.string().min(1),
+    stated_price: z.number().nonnegative().nullable().optional(),
+    rationale: z.string().min(1),
+    goal_match_score: z.number().min(0).max(1),
+  }),
+});
 
 const CreateRequestSchema = z.object({
   goal: z.string().min(3).max(500),
@@ -248,6 +260,57 @@ export function createApp(deps: ServerDeps): Express {
       res.send(`<!doctype html><html><body><script>location.replace("${deps.publicBaseUrl}/?request=${row.id}&status=${status}")</script></body></html>`);
     } catch (error: unknown) {
       res.status(502).send(`Capture failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+
+  // Gate-as-infrastructure: other agents route purchases through the same
+  // gate + payment pipeline. Authenticated with a shared API key.
+  app.post("/gate/propose", async (req, res) => {
+    const gateKey = process.env.GATE_API_KEY ?? "";
+    if (gateKey === "") {
+      res.status(403).json({ error: "gate_api_not_configured", hint: "set GATE_API_KEY to expose the gate" });
+      return;
+    }
+    if (req.header("x-api-key") !== gateKey) {
+      res.status(401).json({ error: "unauthorized", hint: "missing or invalid x-api-key" });
+      return;
+    }
+    const parsed = GateProposeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", detail: z.treeifyError(parsed.error) });
+      return;
+    }
+    const id = randomUUID();
+    const requestToken = randomBytes(24).toString("hex");
+    deps.db.createRequest(id, parsed.data.goal, parsed.data.budget, hashRequestToken(requestToken));
+    deps.db.setRequestStatus(id, "running");
+    try {
+      const result = await executeProposal(
+        deps,
+        id,
+        parsed.data.goal,
+        parsed.data.budget,
+        {
+          productId: parsed.data.proposal.product_id,
+          llmStatedPrice: parsed.data.proposal.stated_price ?? null,
+          rationale: parsed.data.proposal.rationale,
+          goalMatchScore: parsed.data.proposal.goal_match_score,
+        },
+        parsed.data.search_median_price ?? null,
+      );
+      res.json({
+        requestId: id,
+        status: result.status,
+        verdict: result.verdict,
+        reasons: result.reasons,
+        priceUsed: result.priceUsed,
+        approvalLink: result.approvalUrl,
+        paypalOrderId: result.paypalOrderId,
+        productId: result.productId,
+      });
+    } catch (error: unknown) {
+      deps.db.finishRequest(id, "failed", null, null, null);
+      res.status(500).json({ error: "gate_execution_failed", detail: error instanceof Error ? error.message : String(error) });
     }
   });
 

@@ -3,6 +3,7 @@ import { decidePurchase } from "../gate.js";
 import { runAgent } from "../agent.js";
 import { processRequest } from "../requests.js";
 import { openDb } from "../db.js";
+import { createApp } from "../server.js";
 import type { Channel3Client } from "../channel3.js";
 import type { ChatCompleter, LlmMessage, LlmReply, LlmTool } from "../llm.js";
 import type { PaypalOrders } from "../paypal.js";
@@ -109,6 +110,63 @@ function recordingPaypal(): PaypalOrders & { created: number; captured: number }
     },
     getVaultId: async () => (state.captured > 0 ? "VAULT-TOKEN-TEST" : null),
   } as PaypalOrders & { created: number; captured: number };
+}
+
+async function startGateApi(
+  channel3: Channel3Client = channel3With(product("h1", 30)),
+): Promise<{ baseUrl: string; pay: PaypalOrders & { created: number; captured: number }; close: () => void }> {
+  process.env.GATE_API_KEY = "gate-test-key";
+  const db = openDb(":memory:");
+  const pay = recordingPaypal();
+  const app = createApp({
+    db,
+    llm: scriptedLlm([]),
+    channel3,
+    paypal: pay,
+    publicBaseUrl: "http://localhost:3000",
+    brandName: "CartGuard",
+  });
+  const server = app.listen(0);
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
+  return {
+    baseUrl: `http://127.0.0.1:${port}`,
+    pay,
+    close: () => {
+      server.close();
+      db.close();
+      delete process.env.GATE_API_KEY;
+    },
+  };
+}
+
+async function gatePost(
+  baseUrl: string,
+  apiKey: string | null,
+  body: unknown,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey !== null) headers["x-api-key"] = apiKey;
+  const response = await fetch(`${baseUrl}/gate/propose`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  return { status: response.status, json: (await response.json()) as Record<string, unknown> };
+}
+
+function gateBody(productId: string, statedPrice: number): unknown {
+  return {
+    goal: "earbuds under $60",
+    budget: 60,
+    proposal: {
+      product_id: productId,
+      stated_price: statedPrice,
+      rationale: "second-agent proposal",
+      goal_match_score: 0.9,
+    },
+  };
 }
 
 async function runPipeline(
@@ -947,7 +1005,7 @@ export const ATTACKS: RedTeamAttack[] = [
 
 export async function runRedTeam(): Promise<RedTeamResult[]> {
   const results: RedTeamResult[] = [];
-  for (const attack of ATTACKS) {
+  for (const attack of [...ATTACKS, ...GATE_API_ATTACKS]) {
     try {
       const detail = await attack.run();
       results.push({ id: attack.id, category: attack.category, name: attack.name, passed: true, detail });
@@ -963,3 +1021,96 @@ export async function runRedTeam(): Promise<RedTeamResult[]> {
   }
   return results;
 }
+
+// ---- Category: gate API (external agents) ---------------------------------
+
+export const GATE_API_ATTACKS: RedTeamAttack[] = [
+  {
+    id: "GAPI-01",
+    category: "gate_api",
+    name: "Gate API without an API key -> 401, nothing executes",
+    run: async () => {
+      const api = await startGateApi();
+      try {
+        const { status } = await gatePost(api.baseUrl, null, gateBody("h1", 1));
+        assert(status === 401, `expected 401, got ${status}`);
+        assert(api.pay.created === 0, "PayPal was touched on an unauthenticated call");
+        return "rejected before any gating or PayPal traffic";
+      } finally {
+        api.close();
+      }
+    },
+  },
+  {
+    id: "GAPI-02",
+    category: "gate_api",
+    name: "Gate API with a wrong API key -> 401",
+    run: async () => {
+      const api = await startGateApi();
+      try {
+        const { status } = await gatePost(api.baseUrl, "wrong-key", gateBody("h1", 1));
+        assert(status === 401, `expected 401, got ${status}`);
+        assert(api.pay.created === 0, "PayPal was touched on an unauthorized call");
+        return "wrong key rejected";
+      } finally {
+        api.close();
+      }
+    },
+  },
+  {
+    id: "GAPI-03",
+    category: "gate_api",
+    name: "Price spoofing through the gate API: stated $1, verified $30 wins",
+    run: async () => {
+      const api = await startGateApi();
+      try {
+        const { status, json } = await gatePost(api.baseUrl, "gate-test-key", gateBody("h1", 1));
+        assert(status === 200, `expected 200, got ${status}`);
+        assert(json.priceUsed === 30, `gate used ${String(json.priceUsed)}, not the verified 30`);
+        assert(json.verdict === "auto_pay", `expected auto_pay, got ${String(json.verdict)}`);
+        return "external agent's stated price ignored; verified price used";
+      } finally {
+        api.close();
+      }
+    },
+  },
+  {
+    id: "GAPI-04",
+    category: "gate_api",
+    name: "Non-USD product via the gate API -> blocked before PayPal",
+    run: async () => {
+      const jpy = product("jpy1", 2000, {
+        offers: [{ url: "u", domain: "jp-shop.jp", price: 2000, compareAtPrice: null, currency: "JPY", availability: "InStock", inStock: true }],
+        bestOffer: { url: "u", domain: "jp-shop.jp", price: 2000, compareAtPrice: null, currency: "JPY", availability: "InStock", inStock: true },
+      });
+      const api = await startGateApi(channel3With(jpy));
+      try {
+        const { status, json } = await gatePost(api.baseUrl, "gate-test-key", gateBody("jpy1", 2000));
+        assert(status === 200, `expected 200, got ${status}`);
+        assert(json.verdict === "blocked", `expected blocked, got ${String(json.verdict)}`);
+        assert(api.pay.created === 0, "PayPal order created for a non-USD product via gate API");
+        return "blocked with zero PayPal traffic";
+      } finally {
+        api.close();
+      }
+    },
+  },
+  {
+    id: "GAPI-05",
+    category: "gate_api",
+    name: "Replayed identical proposals are each re-gated (no free pass)",
+    run: async () => {
+      const api = await startGateApi();
+      try {
+        const first = await gatePost(api.baseUrl, "gate-test-key", gateBody("h1", 1));
+        const second = await gatePost(api.baseUrl, "gate-test-key", gateBody("h1", 1));
+        assert(first.status === 200 && second.status === 200, "replay changed the HTTP outcome");
+        assert(first.json.priceUsed === 30 && second.json.priceUsed === 30, "replay bypassed price verification");
+        assert(api.pay.created === 2, `expected 2 gated orders, got ${String(api.pay.created)}`);
+        return "every replay runs the gate; verified price each time";
+      } finally {
+        api.close();
+      }
+    },
+  },
+];
