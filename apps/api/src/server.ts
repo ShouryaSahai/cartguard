@@ -162,15 +162,29 @@ export function createApp(deps: ServerDeps): Express {
 
   app.get("/paypal/return", async (req, res) => {
     const requestId = typeof req.query.request_id === "string" ? req.query.request_id : null;
-    const token = typeof req.query.token === "string" ? req.query.token : null;
-    const row = requestId !== null ? deps.db.getRequest(requestId) : null;
-    if (row === null || deps.paypal === null) {
+    if (requestId === null) {
       res.status(404).send("Unknown request");
       return;
     }
-    const orderId = row.paypalOrderId ?? token;
+    const row = deps.db.getRequest(requestId);
+    if (row === null) {
+      res.status(404).send("Unknown request");
+      return;
+    }
+    // Only a pending human approval may be captured from this callback.
+    if (row.status !== "needs_approval") {
+      res.status(409).send(`Request is ${row.status}; nothing to capture`);
+      return;
+    }
+    if (deps.paypal === null) {
+      res.status(409).send("Payment rail unavailable");
+      return;
+    }
+    // The token query param is informational only: authorization and capture
+    // always use the order id stored with the request, never the query string.
+    const orderId = row.paypalOrderId;
     if (orderId === null) {
-      res.status(409).send("No PayPal order to capture");
+      res.status(409).send("No PayPal order was prepared for this request");
       return;
     }
     try {

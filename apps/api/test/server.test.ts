@@ -382,3 +382,65 @@ describe("server: mutating-endpoint auth", () => {
     expect(auditBody).not.toContain(token);
   });
 });
+
+describe("server: /paypal/return hardening", () => {
+  async function makePending(baseUrl: string): Promise<{ id: string; token: string; orderId: string }> {
+    const harness = running[running.length - 1]!;
+    const config = harness.db.getPolicy();
+    harness.db.putPolicy({ ...config, perPurchaseCap: 20 });
+    const { id, token } = await createRequest(baseUrl, { goal: "earbuds", budget: 100 });
+    const detail = (await waitForStatus(baseUrl, id)) as { status: string; approvalUrl: string };
+    expect(detail.status).toBe("needs_approval");
+    const row = harness.db.getRequest(id);
+    expect(row?.paypalOrderId).not.toBeNull();
+    return { id, token, orderId: row!.paypalOrderId! };
+  }
+
+  it("captures the STORED order id and ignores the token query param", async () => {
+    await startServer();
+    const { baseUrl } = running[running.length - 1]!;
+    const { id, orderId } = await makePending(baseUrl);
+    const response = await fetch(`${baseUrl}/paypal/return?request_id=${id}&token=SOMETHING-ELSE`);
+    expect(response.status).toBe(200);
+    const paypalFake = harness_paypal();
+    expect(paypalFake.captures).toContain(orderId);
+    expect(paypalFake.captures).not.toContain("SOMETHING-ELSE");
+    const detail = (await (await fetch(`${baseUrl}/requests/${id}`)).json()) as { request: { status: string } };
+    expect(detail.request.status).toBe("captured");
+  });
+
+  it("refuses to capture a rejected request", async () => {
+    await startServer();
+    const { baseUrl } = running[running.length - 1]!;
+    const { id, token } = await makePending(baseUrl);
+    await fetch(`${baseUrl}/requests/${id}/reject`, { method: "POST", headers: { "x-request-token": token } });
+    const response = await fetch(`${baseUrl}/paypal/return?request_id=${id}`);
+    expect(response.status).toBe(409);
+  });
+
+  it("refuses to capture an already-captured request (replay)", async () => {
+    await startServer();
+    const { baseUrl } = running[running.length - 1]!;
+    const { id, token } = await makePending(baseUrl);
+    await fetch(`${baseUrl}/requests/${id}/approve`, { method: "POST", headers: { "x-request-token": token } });
+    const replay = await fetch(`${baseUrl}/paypal/return?request_id=${id}`);
+    expect(replay.status).toBe(409);
+    const paypalFake = harness_paypal();
+    expect(paypalFake.captures.length).toBe(1);
+  });
+
+  it("refuses to capture a blocked request and 404s unknown ids", async () => {
+    await startServer();
+    const { baseUrl } = running[running.length - 1]!;
+    const { id } = await createRequest(baseUrl, { goal: "earbuds", budget: 10 });
+    await waitForStatus(baseUrl, id); // blocked
+    expect((await fetch(`${baseUrl}/paypal/return?request_id=${id}`)).status).toBe(409);
+    expect((await fetch(`${baseUrl}/paypal/return?request_id=00000000-0000-4000-8000-000000000000`)).status).toBe(404);
+    expect((await fetch(`${baseUrl}/paypal/return`)).status).toBe(404);
+  });
+});
+
+function harness_paypal(): PaypalOrders & FakePaypalState {
+  const harness = running[running.length - 1]!;
+  return harness.deps.paypal as PaypalOrders & FakePaypalState;
+}
