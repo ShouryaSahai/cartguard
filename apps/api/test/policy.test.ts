@@ -212,6 +212,39 @@ describe("policy: strictest verdict wins", () => {
   });
 });
 
+describe("policy: currency rule", () => {
+  it("blocks a JPY-only offer instead of charging it as USD", () => {
+    const p = product({ bestOffer: offer({ currency: "JPY", price: 2000 }) });
+    const result = evaluatePolicy(input({ product: p, budget: 60 }), CONFIG);
+    expect(result.verdict).toBe("blocked");
+    expect(result.reasons.some((r) => r.rule === "non_usd_offer")).toBe(true);
+  });
+
+  it("blocks an EUR-only offer", () => {
+    const p = product({ bestOffer: offer({ currency: "EUR", price: 25 }) });
+    const result = evaluatePolicy(input({ product: p, budget: 60 }), CONFIG);
+    expect(result.verdict).toBe("blocked");
+    expect(result.reasons.some((r) => r.rule === "non_usd_offer")).toBe(true);
+  });
+
+  it("still auto_pays a USD offer", () => {
+    const result = evaluatePolicy(input(), CONFIG);
+    expect(result.verdict).toBe("auto_pay");
+  });
+
+  it("matches the currency case-insensitively", () => {
+    const p = product({ bestOffer: offer({ currency: "usd", price: 30 }) });
+    const result = evaluatePolicy(input({ product: p, budget: 60 }), CONFIG);
+    expect(result.verdict).toBe("auto_pay");
+  });
+
+  it("blocks a non-USD offer even when every other rule would pass", () => {
+    const p = product({ bestOffer: offer({ currency: "GBP", price: 10 }) });
+    const result = evaluatePolicy(input({ product: p, budget: 60, goalMatchScore: 0.99 }), CONFIG);
+    expect(result.verdict).toBe("blocked");
+  });
+});
+
 describe("policy: determinism", () => {
   it("gives the same verdict for the same input, every time", () => {
     const a = input({ searchMedianPrice: 55, goalMatchScore: 0.8 });

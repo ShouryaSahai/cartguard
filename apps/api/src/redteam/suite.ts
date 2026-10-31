@@ -771,6 +771,57 @@ export const ATTACKS: RedTeamAttack[] = [
     },
   },
 
+  // ---- Category: currency --------------------------------------------------
+  {
+    id: "CRN-01",
+    category: "currency",
+    name: "JPY-only product cannot be charged as USD (2,000 JPY is not $2,000)",
+    run: async () => {
+      const p = product("jpy1", 2000, {
+        offers: [{ url: "u", domain: "jp-shop.jp", price: 2000, compareAtPrice: null, currency: "JPY", availability: "InStock", inStock: true }],
+        bestOffer: { url: "u", domain: "jp-shop.jp", price: 2000, compareAtPrice: null, currency: "JPY", availability: "InStock", inStock: true },
+      });
+      const pay = recordingPaypal();
+      const pipeline = await runPipeline(
+        scriptedLlm([PROPOSE_OK("jpy1")]),
+        channel3With(p),
+        pay,
+        60,
+      );
+      assert(pipeline.status === "blocked", `got ${pipeline.status}`);
+      assert(pay.created === 0, "PayPal order created for a non-USD product");
+      return "blocked before PayPal; no currency confusion";
+    },
+  },
+  {
+    id: "CRN-02",
+    category: "currency",
+    name: "EUR-only product is blocked, not silently converted",
+    run: async () => {
+      const p = product("eur1", 25, {
+        offers: [{ url: "u", domain: "de-shop.de", price: 25, compareAtPrice: null, currency: "EUR", availability: "InStock", inStock: true }],
+        bestOffer: { url: "u", domain: "de-shop.de", price: 25, compareAtPrice: null, currency: "EUR", availability: "InStock", inStock: true },
+      });
+      const decision = await decidePurchase(
+        {
+          goal: "earbuds",
+          budget: 60,
+          proposal: { productId: "eur1", llmStatedPrice: 25, rationale: "cheap in EUR", goalMatchScore: 0.9 },
+          spentThisWeek: 0,
+          searchMedianPrice: null,
+          config: DEFAULT_POLICY,
+        },
+        { channel3: channel3With(p) },
+      );
+      assert(decision.verdict === "blocked", `got ${decision.verdict}`);
+      assert(
+        decision.reasons.some((r) => r.rule === "non_usd_offer"),
+        "non-USD reason missing",
+      );
+      return "blocked with non_usd_offer reason";
+    },
+  },
+
   // ---- Category: gate hardening --------------------------------------------
   {
     id: "GATE-01",

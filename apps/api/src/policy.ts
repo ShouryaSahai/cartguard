@@ -18,6 +18,7 @@ export const RULES = {
   categoryBlocklist: "category_blocklist",
   productUnavailable: "product_unavailable",
   goalMismatch: "goal_mismatch",
+  nonUsdOffer: "non_usd_offer",
 } as const;
 
 function usd(amount: number): string {
@@ -33,6 +34,13 @@ export function evaluatePolicy(input: PolicyInput, config: PolicyConfig): Policy
   const category = product.categorySlug.toLowerCase();
 
   if (best !== null) {
+    if (best.currency.toUpperCase() !== "USD") {
+      reasons.push({
+        rule: RULES.nonUsdOffer,
+        outcome: "blocked",
+        message: `Non-USD offer (${best.currency}) — refusing to charge a foreign-currency amount as USD.`,
+      });
+    }
     if (price > input.budget) {
       reasons.push({
         rule: RULES.budget,
