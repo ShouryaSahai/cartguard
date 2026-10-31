@@ -21,6 +21,8 @@ export interface AgentDeps {
 }
 
 const DEFAULT_MAX_STEPS = 8;
+/** Hard ceiling: even a caller-supplied maxSteps cannot exceed this. */
+export const MAX_STEPS_CAP = 12;
 const DESCRIPTION_EXCERPT_LIMIT = 300;
 
 // The LLM has exactly these tools. There is no payment tool and there never
@@ -150,7 +152,7 @@ const ProposeArgsSchema = z.object({
 });
 
 export async function runAgent(goal: string, budget: number, deps: AgentDeps): Promise<AgentOutcome> {
-  const maxSteps = deps.maxSteps ?? DEFAULT_MAX_STEPS;
+  const maxSteps = Math.min(deps.maxSteps ?? DEFAULT_MAX_STEPS, MAX_STEPS_CAP);
   const trace: AgentStep[] = [];
   const productsSeen: NormalizedProduct[] = [];
   const seenIds = new Set<string>();

@@ -53,8 +53,33 @@ function authorizeRequestMutation(
   return hashRequestToken(providedToken) === stored;
 }
 
+/** Per-IP sliding-window limiter for POST /requests. In-memory by design:
+ * a restart clears it, which is acceptable for a demo-scale guard. */
+const rateHits = new Map<string, number[]>();
+
+function isRateLimited(ip: string): boolean {
+  const limit = Number(process.env.RATE_LIMIT_PER_MINUTE ?? 10);
+  const now = Date.now();
+  const hits = (rateHits.get(ip) ?? []).filter((t) => now - t < 60_000);
+  if (hits.length >= limit) {
+    rateHits.set(ip, hits);
+    return true;
+  }
+  hits.push(now);
+  rateHits.set(ip, hits);
+  if (rateHits.size > 5000) {
+    for (const [key, times] of rateHits) {
+      if (times.every((t) => now - t >= 60_000)) rateHits.delete(key);
+    }
+  }
+  return false;
+}
+
 export function createApp(deps: ServerDeps): Express {
   const app = express();
+  // Behind Render's proxy (and in tests): honor X-Forwarded-For so per-IP
+  // rate limiting sees real client IPs.
+  app.set("trust proxy", true);
   app.use(express.json());
 
   app.get("/health", (_req, res) => {
@@ -66,6 +91,17 @@ export function createApp(deps: ServerDeps): Express {
   });
 
   app.post("/requests", (req, res) => {
+    if (isRateLimited(req.ip ?? "unknown")) {
+      res.status(429).json({ error: "rate_limited", hint: "too many requests from this address" });
+      return;
+    }
+    const dailyCap = Number(process.env.DAILY_REQUEST_CAP ?? 200);
+    const startOfUtcDay = new Date();
+    startOfUtcDay.setUTCHours(0, 0, 0, 0);
+    if (deps.db.requestsCreatedSince(startOfUtcDay.toISOString()) >= dailyCap) {
+      res.status(429).json({ error: "daily_cap_reached", cap: dailyCap });
+      return;
+    }
     const parsed = CreateRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "invalid_body", detail: z.treeifyError(parsed.error) });

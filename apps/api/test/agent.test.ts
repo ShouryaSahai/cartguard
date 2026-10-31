@@ -283,3 +283,13 @@ describe("agent: hostile product text stays data", () => {
     expect(outcome.trace.some((entry) => entry.kind === "tool_call" && entry.text.includes("pay_now"))).toBe(false);
   });
 });
+
+describe("agent: max-steps hard cap", () => {
+  it("clamps a caller-supplied maxSteps of 1000 to the cap", async () => {
+    const { llm, requests } = scriptedLlm([callReply("search_products", { query: "earbuds" }, "loop")]);
+    const outcome = await runAgent("earbuds", 60, { llm, channel3: DEPS_BASE.channel3, maxSteps: 1000 });
+    expect(outcome.status).toBe("max_steps_exceeded");
+    expect(outcome.proposal).toBeNull();
+    expect(requests.length).toBeLessThanOrEqual(12);
+  });
+});

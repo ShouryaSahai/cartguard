@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Channel3Client } from "../src/channel3.js";
 import type { ChatCompleter, LlmReply, LlmMessage, LlmTool } from "../src/llm.js";
 import type { PaypalOrders } from "../src/paypal.js";
@@ -95,6 +95,15 @@ interface RunningServer {
 }
 
 const running: RunningServer[] = [];
+
+// The suite creates many requests from one address; keep the abuse-limit
+// guard out of the way except inside its own dedicated tests.
+beforeAll(() => {
+  process.env.RATE_LIMIT_PER_MINUTE = "100000";
+});
+afterAll(() => {
+  delete process.env.RATE_LIMIT_PER_MINUTE;
+});
 
 async function startServer(overrides: Partial<ServerDeps> = {}): Promise<RunningServer> {
   const db = openDb(":memory:");
@@ -464,3 +473,59 @@ function harness_paypal(): PaypalOrders & FakePaypalState {
   const harness = running[running.length - 1]!;
   return harness.deps.paypal as PaypalOrders & FakePaypalState;
 }
+
+describe("server: abuse limits", () => {
+  const SAVED: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    SAVED.RATE_LIMIT_PER_MINUTE = process.env.RATE_LIMIT_PER_MINUTE;
+    SAVED.DAILY_REQUEST_CAP = process.env.DAILY_REQUEST_CAP;
+    process.env.RATE_LIMIT_PER_MINUTE = "100000";
+    delete process.env.DAILY_REQUEST_CAP;
+  });
+
+  afterEach(() => {
+    if (SAVED.RATE_LIMIT_PER_MINUTE === undefined) delete process.env.RATE_LIMIT_PER_MINUTE;
+    else process.env.RATE_LIMIT_PER_MINUTE = SAVED.RATE_LIMIT_PER_MINUTE;
+    if (SAVED.DAILY_REQUEST_CAP === undefined) delete process.env.DAILY_REQUEST_CAP;
+    else process.env.DAILY_REQUEST_CAP = SAVED.DAILY_REQUEST_CAP;
+  });
+
+  it("rate-limits POST /requests per IP with 429", async () => {
+    process.env.RATE_LIMIT_PER_MINUTE = "2";
+    await startServer();
+    const { baseUrl } = running[running.length - 1]!;
+    const ip = "10.77.0.1";
+    const post = () =>
+      fetch(`${baseUrl}/requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-forwarded-for": ip },
+        body: JSON.stringify({ goal: "earbuds", budget: 60 }),
+      });
+    expect((await post()).status).toBe(201);
+    expect((await post()).status).toBe(201);
+    const third = await post();
+    expect(third.status).toBe(429);
+    const detail = (await third.json()) as { error: string };
+    expect(detail.error).toBe("rate_limited");
+  });
+
+  it("enforces the global daily request cap with 429", async () => {
+    process.env.DAILY_REQUEST_CAP = "1";
+    await startServer();
+    const { baseUrl } = running[running.length - 1]!;
+    const ip = "10.77.0.2";
+    const post = () =>
+      fetch(`${baseUrl}/requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-forwarded-for": ip },
+        body: JSON.stringify({ goal: "earbuds", budget: 60 }),
+      });
+    expect((await post()).status).toBe(201);
+    const second = await post();
+    expect(second.status).toBe(429);
+    const detail = (await second.json()) as { error: string; cap: number };
+    expect(detail.error).toBe("daily_cap_reached");
+    expect(detail.cap).toBe(1);
+  });
+});

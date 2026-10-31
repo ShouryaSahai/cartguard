@@ -68,6 +68,8 @@ export interface CartGuardDb {
   putPolicy(config: PolicyConfig): void;
   getSetting(key: string): string | null;
   setSetting(key: string, value: string): void;
+  /** Number of requests created at or after the given ISO timestamp. */
+  requestsCreatedSince(iso: string): number;
   /** Sum of CAPTURED audit-row prices in the last 7 days (PRD weekly spend). */
   weeklyCapturedSpend(now: Date): number;
   close(): void;
@@ -257,6 +259,13 @@ export function openDb(path: string): CartGuardDb {
       db.prepare(
         "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
       ).run(key, value);
+    },
+
+    requestsCreatedSince(iso: string): number {
+      const row = db
+        .prepare("SELECT COUNT(*) AS n FROM requests WHERE created_at >= ?")
+        .get(iso) as { n: number };
+      return row.n;
     },
 
     weeklyCapturedSpend(now: Date): number {
