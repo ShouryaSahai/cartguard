@@ -11,7 +11,8 @@
     "redteam": "tsx scripts/redteam.ts",
     "start": "tsx src/server.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "preflight": "tsx scripts/preflight.ts"
+    "preflight": "tsx scripts/preflight.ts",
+    "spike:paypal": "tsx scripts/spike-paypal.ts"
   },
   "dependencies": {
     "@cartguard/shared": "*",
