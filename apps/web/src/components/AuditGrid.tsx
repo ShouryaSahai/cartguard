@@ -16,7 +16,7 @@ const VERDICT_TONE: Record<string, Tone> = {
   failed: "danger",
 };
 
-function verdictRenderer(props: ICellRendererParams<AuditRow, string>) {
+function VerdictBadgeRenderer(props: ICellRendererParams<AuditRow, string>) {
   const verdict = props.value ?? "";
   const tone = VERDICT_TONE[verdict] ?? "neutral";
   const toneClass =
@@ -27,7 +27,11 @@ function verdictRenderer(props: ICellRendererParams<AuditRow, string>) {
         : tone === "danger"
           ? "text-danger border-danger/30 bg-danger/10"
           : "text-muted border-border bg-fg/5";
-  return `<span class="ag-badge ${toneClass}">${verdict}</span>`;
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${toneClass}`}>
+      {verdict}
+    </span>
+  );
 }
 
 export function AuditGrid({ refreshKey }: { refreshKey: number }) {
@@ -81,7 +85,7 @@ export function AuditGrid({ refreshKey }: { refreshKey: number }) {
         field: "verdict",
         headerName: "Verdict",
         width: 140,
-        cellRenderer: verdictRenderer,
+        cellRenderer: VerdictBadgeRenderer,
       },
       { field: "paypalStatus", headerName: "PayPal", width: 130 },
       {
@@ -156,6 +160,7 @@ export function AuditGrid({ refreshKey }: { refreshKey: number }) {
             }
             pagination
             paginationPageSize={50}
+            paginationPageSizeSelector={false}
           />
         </div>
       </CardBody>

@@ -5,12 +5,13 @@ import { PolicyEditor } from "./components/PolicyEditor";
 import { RequestView } from "./components/RequestView";
 import { api } from "./lib/api";
 import { cn, Spinner } from "./components/ui";
+import { ChartsPanel } from "./components/ChartsPanel";
 
 // AG Grid is heavy — load it only when the audit tab is opened.
 const AuditGrid = lazy(async () => ({ default: await import("./components/AuditGrid").then((m) => m.AuditGrid) }));
 
 type Theme = "dark" | "light";
-type Tab = "audit" | "policy";
+type Tab = "audit" | "insights" | "policy";
 
 export function App() {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -62,7 +63,7 @@ export function App() {
           </div>
           <div className="space-y-4">
             <div className="flex gap-2">
-              {(["audit", "policy"] as Tab[]).map((name) => (
+              {(["audit", "insights", "policy"] as Tab[]).map((name) => (
                 <button
                   key={name}
                   type="button"
@@ -74,11 +75,19 @@ export function App() {
                       : "border-border text-muted hover:text-fg",
                   )}
                 >
-                  {name === "audit" ? "Audit log" : "Policy editor"}
+                  {
+                    name === "audit"
+                      ? "Audit log"
+                      : name === "insights"
+                        ? "Insights"
+                        : "Policy editor"
+                  }
                 </button>
               ))}
             </div>
-            {tab === "audit" ? (
+            {tab === "insights" ? (
+              <ChartsPanel refreshKey={auditKey} />
+            ) : tab === "audit" ? (
               <Suspense
                 fallback={
                   <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-4 text-sm text-muted">
