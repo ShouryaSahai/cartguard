@@ -20,6 +20,18 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Best-effort: after a completed store-in-vault capture, save the payment
+ * token so future auto_pay verdicts can charge it with no buyer click. */
+export async function rememberVaultToken(deps: PipelineDeps, orderId: string): Promise<void> {
+  if (deps.paypal === null) return;
+  try {
+    const vaultId = await deps.paypal.getVaultId(orderId);
+    if (vaultId !== null) deps.db.setSetting("paypal_vault_id", vaultId);
+  } catch {
+    // Token extraction is opportunistic; the one-click fallback still works.
+  }
+}
+
 export function startRequestProcessing(
   requestId: string,
   goal: string,
@@ -127,6 +139,8 @@ export async function processRequest(
   const returnUrl = `${deps.publicBaseUrl}/paypal/return?request_id=${encodeURIComponent(requestId)}`;
   const cancelUrl = `${deps.publicBaseUrl}/?canceled=${encodeURIComponent(requestId)}`;
   const vaultOnSuccess = decision.verdict === "auto_pay";
+  // A saved token (from a previous vaulted approval) enables true no-click pay.
+  const savedVaultId = vaultOnSuccess ? (deps.db.getSetting("paypal_vault_id") ?? undefined) : undefined;
 
   try {
     const order = await deps.paypal.createOrder({
@@ -135,12 +149,14 @@ export async function processRequest(
       cancelUrl,
       brandName: deps.brandName,
       vaultOnSuccess,
+      vaultId: savedVaultId,
     });
 
     if (decision.verdict === "auto_pay") {
       try {
         const capture = await deps.paypal.captureOrder(order.orderId);
         if (capture.status === "COMPLETED") {
+          await rememberVaultToken(deps, order.orderId);
           deps.db.finishRequest(requestId, "captured", verified, order.orderId, null);
           deps.db.appendAudit({
             requestId,
@@ -150,7 +166,9 @@ export async function processRequest(
             priceUsd: decision.priceUsed,
             verdict: "auto_pay",
             reasons: [],
-            llmRationale: proposal.rationale,
+            llmRationale: savedVaultId !== undefined
+              ? "Charged the saved PayPal payment token — no buyer click needed."
+              : proposal.rationale,
             paypalOrderId: order.orderId,
             paypalStatus: "CAPTURED",
           });

@@ -65,6 +65,8 @@ export interface CartGuardDb {
   listAudit(limit: number): AuditRow[];
   getPolicy(): PolicyConfig;
   putPolicy(config: PolicyConfig): void;
+  getSetting(key: string): string | null;
+  setSetting(key: string, value: string): void;
   /** Sum of CAPTURED audit-row prices in the last 7 days (PRD weekly spend). */
   weeklyCapturedSpend(now: Date): number;
   close(): void;
@@ -100,6 +102,10 @@ function table(db: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS policy (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       json TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_audit_request ON audit(request_id);
     CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);
@@ -225,6 +231,19 @@ export function openDb(path: string): CartGuardDb {
       db.prepare(
         "INSERT INTO policy (id, json) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json",
       ).run(JSON.stringify(config));
+    },
+
+    getSetting(key: string): string | null {
+      const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
+        | { value: string }
+        | undefined;
+      return row === undefined ? null : row.value;
+    },
+
+    setSetting(key: string, value: string): void {
+      db.prepare(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ).run(key, value);
     },
 
     weeklyCapturedSpend(now: Date): number {

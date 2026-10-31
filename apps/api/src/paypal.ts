@@ -24,6 +24,8 @@ export interface CreateOrderParams {
   brandName: string;
   /** Vault the buyer's PayPal on success so later auto-charge can use the token. */
   vaultOnSuccess: boolean;
+  /** Charge against a previously saved payment token (true no-click auto-pay). */
+  vaultId?: string;
 }
 
 export interface PaypalOrderResult {
@@ -35,6 +37,8 @@ export interface PaypalOrderResult {
 export interface PaypalOrders {
   createOrder(params: CreateOrderParams): Promise<PaypalOrderResult>;
   captureOrder(orderId: string): Promise<{ orderId: string; status: string }>;
+  /** Vault token saved by a completed store-in-vault order, if any. */
+  getVaultId(orderId: string): Promise<string | null>;
 }
 
 export function createPaypalOrdersFromEnv(env: NodeJS.ProcessEnv = process.env): PaypalOrders {
@@ -60,6 +64,7 @@ export function createPaypalOrdersFromEnv(env: NodeJS.ProcessEnv = process.env):
           ],
           paymentSource: {
             paypal: {
+              ...(params.vaultId !== undefined ? { vaultId: params.vaultId } : {}),
               experienceContext: {
                 brandName: params.brandName,
                 returnUrl: params.returnUrl,
@@ -89,6 +94,16 @@ export function createPaypalOrdersFromEnv(env: NodeJS.ProcessEnv = process.env):
     async captureOrder(orderId: string): Promise<{ orderId: string; status: string }> {
       const response = await orders.captureOrder({ id: orderId });
       return { orderId, status: response.result.status ?? "UNKNOWN" };
+    },
+
+    async getVaultId(orderId: string): Promise<string | null> {
+      const response = await orders.getOrder({ id: orderId });
+      const order = response.result as unknown as {
+        paymentSource?: {
+          paypal?: { attributes?: { vault?: { vaultId?: string } } };
+        };
+      };
+      return order.paymentSource?.paypal?.attributes?.vault?.vaultId ?? null;
     },
   };
 }

@@ -104,6 +104,7 @@ function recordingPaypal(): PaypalOrders & { created: number; captured: number }
       state.captured += 1;
       return { orderId, status: "COMPLETED" };
     },
+    getVaultId: async () => (state.captured > 0 ? "VAULT-TOKEN-TEST" : null),
   } as PaypalOrders & { created: number; captured: number };
 }
 

@@ -56,22 +56,29 @@ function fakeChannel3(): Channel3Client {
   };
 }
 
-function fakePaypal(): PaypalOrders & { captures: string[] } {
-  const captures: string[] = [];
+interface FakePaypalState {
+  creates: Array<{ amountUsd: number; vaultId?: string }>;
+  captures: string[];
+}
+
+function fakePaypal(): PaypalOrders & FakePaypalState {
+  const state: FakePaypalState = { creates: [], captures: [] };
   return {
-    captures,
+    creates: state.creates,
+    captures: state.captures,
     createOrder: async (params) => {
-      void params;
+      state.creates.push({ amountUsd: params.amountUsd, vaultId: params.vaultId });
       return {
-        orderId: `ORD-${Math.random()}`,
+        orderId: `ORD-${state.creates.length}`,
         status: "APPROVED",
         approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=ORD-X",
       };
     },
     captureOrder: async (orderId) => {
-      captures.push(orderId);
+      state.captures.push(orderId);
       return { orderId, status: "COMPLETED" };
     },
+    getVaultId: async () => (state.captures.length > 0 ? "VAULT-TOKEN-001" : null),
   };
 }
 
@@ -216,6 +223,25 @@ describe("server: the three demo paths", () => {
     expect(data.status).toBe("rejected");
     const paypalFake = harness.deps.paypal as PaypalOrders & { captures: string[] };
     expect(paypalFake.captures.length).toBe(0);
+  });
+
+  it("vault: after one approval, later auto_pay purchases charge the saved token", async () => {
+    const harness = await startServer();
+    const config = harness.db.getPolicy();
+    harness.db.putPolicy({ ...config, weeklyCap: 5000, perPurchaseCap: 100 });
+    const first = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
+    expect((await waitForStatus(harness.baseUrl, first)).status).toBe("captured");
+    const second = await createRequest(harness.baseUrl, { goal: "earbuds again", budget: 60 });
+    expect((await waitForStatus(harness.baseUrl, second)).status).toBe("captured");
+    const paypalFake = harness.deps.paypal as PaypalOrders & FakePaypalState;
+    expect(paypalFake.creates.length).toBe(2);
+    expect(paypalFake.creates[0]!.vaultId).toBeUndefined();
+    expect(paypalFake.creates[1]!.vaultId).toBe("VAULT-TOKEN-001");
+    const detail = (await (await fetch(`${harness.baseUrl}/requests/${second}`)).json()) as {
+      audit: Array<{ step: string; llmRationale: string | null }>;
+    };
+    const paymentRow = detail.audit.find((row) => row.step === "payment" && row.llmRationale !== null);
+    expect(paymentRow?.llmRationale).toContain("saved PayPal payment token");
   });
 });
 

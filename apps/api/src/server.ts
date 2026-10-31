@@ -13,7 +13,7 @@ import { openDb, type CartGuardDb, type RequestStatus } from "./db.js";
 import "./env.js";
 import { createLlmCompleter, type ChatCompleter } from "./llm.js";
 import { createPaypalOrdersFromEnv, type PaypalOrders } from "./paypal.js";
-import { startRequestProcessing } from "./requests.js";
+import { rememberVaultToken, startRequestProcessing } from "./requests.js";
 
 export interface ServerDeps {
   db: CartGuardDb;
@@ -87,6 +87,9 @@ export function createApp(deps: ServerDeps): Express {
     try {
       const capture = await deps.paypal.captureOrder(row.paypalOrderId);
       const status: RequestStatus = capture.status === "COMPLETED" ? "captured" : "failed";
+      if (capture.status === "COMPLETED") {
+        await rememberVaultToken(deps, row.paypalOrderId);
+      }
       deps.db.finishRequest(row.id, status, row.chosenProduct, row.paypalOrderId, null);
       deps.db.appendAudit({
         requestId: row.id,
@@ -148,6 +151,9 @@ export function createApp(deps: ServerDeps): Express {
     try {
       const capture = await deps.paypal.captureOrder(orderId);
       const status: RequestStatus = capture.status === "COMPLETED" ? "captured" : "failed";
+      if (capture.status === "COMPLETED") {
+        await rememberVaultToken(deps, orderId);
+      }
       deps.db.finishRequest(row.id, status, row.chosenProduct, orderId, null);
       deps.db.appendAudit({
         requestId: row.id,
