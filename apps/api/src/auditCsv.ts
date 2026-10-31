@@ -12,6 +12,7 @@ const HEADER = [
   "price_usd",
   "verdict",
   "paypal_status",
+  "mandate_id",
   "ts",
 ];
 
@@ -33,6 +34,7 @@ export function auditToCsv(rows: AuditRow[]): string {
         row.priceUsd,
         row.verdict,
         row.paypalStatus,
+        row.mandateId,
         row.ts,
       ]
         .map(csvCell)

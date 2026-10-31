@@ -26,7 +26,7 @@ describe("audit CSV export", () => {
     const csv = auditToCsv([row(), row({ id: 2, verdict: "blocked" })]);
     const lines = csv.trimEnd().split("\n");
     expect(lines.length).toBe(3);
-    expect(lines[0]).toBe("audit_id,request_id,step,product_id,merchant,price_usd,verdict,paypal_status,ts");
+    expect(lines[0]).toBe("audit_id,request_id,step,product_id,merchant,price_usd,verdict,paypal_status,mandate_id,ts");
     expect(lines[1]).toContain("auto_pay");
     expect(lines[2]).toContain("blocked");
   });

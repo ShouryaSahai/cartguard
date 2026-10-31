@@ -179,6 +179,22 @@ export const PolicyReasonSchema = z.object({
 });
 export type PolicyReason = z.infer<typeof PolicyReasonSchema>;
 
+// Runtime view of a spending mandate, stamped by the caller (nowIso keeps
+// evaluatePolicy deterministic).
+export const MandateRuntimeSchema = z.object({
+  id: z.string(),
+  budgetUsd: z.number().nonnegative().finite(),
+  expiresAt: z.string().nullable(),
+  revoked: z.boolean(),
+  maxItems: z.number().int().positive().nullable(),
+  itemsUsed: z.number().int().nonnegative().default(0),
+  spentUnderMandate: z.number().nonnegative().default(0),
+  allowedMerchants: z.array(z.string()).default([]),
+  blocklistCategories: z.array(z.string()).default([]),
+  nowIso: z.string(),
+});
+export type MandateRuntime = z.infer<typeof MandateRuntimeSchema>;
+
 export const PolicyInputSchema = z.object({
   goal: z.string().min(1),
   budget: z.number().nonnegative().finite(),
@@ -186,6 +202,7 @@ export const PolicyInputSchema = z.object({
   spentThisWeek: z.number().nonnegative().default(0),
   searchMedianPrice: z.number().positive().nullable().default(null),
   goalMatchScore: z.number().min(0).max(1).nullable().default(null),
+  mandate: MandateRuntimeSchema.nullable().optional(),
 });
 export type PolicyInput = z.infer<typeof PolicyInputSchema>;
 

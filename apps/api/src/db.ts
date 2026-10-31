@@ -28,10 +28,23 @@ export interface RequestRow {
   approvalUrl: string | null;
   createdAt: string;
   trace: AgentStep[];
+  mandateId: string | null;
+}
+
+export interface MandateRow {
+  id: string;
+  budgetUsd: number;
+  expiresAt: string | null;
+  allowedMerchants: string[];
+  blocklistCategories: string[];
+  maxItems: number | null;
+  revoked: boolean;
+  createdAt: string;
 }
 
 export interface AuditEntry {
   requestId: string;
+  mandateId?: string | null;
   step: string;
   productId: string | null;
   merchant: string | null;
@@ -61,6 +74,7 @@ export interface CartGuardDb {
   getRequest(id: string): RequestRow | null;
   setRequestTrace(id: string, trace: AgentStep[]): void;
   getRequestApprovalSecretHash(id: string): string | null;
+  setRequestMandate(id: string, mandateId: string): void;
   appendAudit(entry: AuditEntry): void;
   auditForRequest(requestId: string): AuditRow[];
   listAudit(limit: number): AuditRow[];
@@ -70,6 +84,12 @@ export interface CartGuardDb {
   setSetting(key: string, value: string): void;
   /** Number of requests created at or after the given ISO timestamp. */
   requestsCreatedSince(iso: string): number;
+  createMandate(mandate: MandateRow): void;
+  getMandate(id: string): MandateRow | null;
+  listMandates(): MandateRow[];
+  revokeMandate(id: string): void;
+  countCapturedItems(mandateId: string): number;
+  spentUnderMandate(mandateId: string): number;
   /** Sum of CAPTURED audit-row prices in the last 7 days (PRD weekly spend). */
   weeklyCapturedSpend(now: Date): number;
   close(): void;
@@ -111,6 +131,16 @@ function table(db: DatabaseSync): void {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS mandates (
+      id TEXT PRIMARY KEY,
+      budget_usd REAL NOT NULL,
+      expires_at TEXT,
+      allowed_merchants TEXT NOT NULL,
+      blocklist_categories TEXT NOT NULL,
+      max_items INTEGER,
+      revoked INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_audit_request ON audit(request_id);
     CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);
   `);
@@ -120,12 +150,17 @@ export function openDb(path: string): CartGuardDb {
   const db = new DatabaseSync(path);
   table(db);
   // Lightweight migrations for databases created before these columns existed.
-  for (const column of ["trace_json TEXT", "approval_secret_hash TEXT"]) {
+  for (const column of ["trace_json TEXT", "approval_secret_hash TEXT", "mandate_id TEXT"]) {
     try {
       db.exec(`ALTER TABLE requests ADD COLUMN ${column}`);
     } catch {
       // Column already exists.
     }
+  }
+  try {
+    db.exec("ALTER TABLE audit ADD COLUMN mandate_id TEXT");
+  } catch {
+    // Column already exists.
   }
 
   return {
@@ -177,6 +212,7 @@ export function openDb(path: string): CartGuardDb {
             paypal_order_id: string | null;
             approval_url: string | null;
             trace_json: string | null;
+            mandate_id: string | null;
             created_at: string;
           }
         | undefined;
@@ -194,7 +230,12 @@ export function openDb(path: string): CartGuardDb {
         approvalUrl: row.approval_url,
         createdAt: row.created_at,
         trace: row.trace_json === null ? [] : (JSON.parse(row.trace_json) as AgentStep[]),
+        mandateId: row.mandate_id ?? null,
       };
+    },
+
+    setRequestMandate(id: string, mandateId: string): void {
+      db.prepare("UPDATE requests SET mandate_id = ? WHERE id = ?").run(mandateId, id);
     },
 
     setRequestTrace(id: string, trace: AgentStep[]): void {
@@ -203,8 +244,8 @@ export function openDb(path: string): CartGuardDb {
 
     appendAudit(entry: AuditEntry): void {
       db.prepare(
-        `INSERT INTO audit (request_id, step, product_id, merchant, price_usd, verdict, reasons_json, llm_rationale, paypal_order_id, paypal_status, ts)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO audit (request_id, step, product_id, merchant, price_usd, verdict, reasons_json, llm_rationale, paypal_order_id, paypal_status, mandate_id, ts)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         entry.requestId,
         entry.step,
@@ -216,6 +257,7 @@ export function openDb(path: string): CartGuardDb {
         entry.llmRationale,
         entry.paypalOrderId,
         entry.paypalStatus,
+        entry.mandateId ?? null,
         new Date().toISOString(),
       );
     },
@@ -261,6 +303,83 @@ export function openDb(path: string): CartGuardDb {
       ).run(key, value);
     },
 
+    createMandate(mandate: MandateRow): void {
+      db.prepare(
+        "INSERT INTO mandates (id, budget_usd, expires_at, allowed_merchants, blocklist_categories, max_items, revoked, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ).run(
+        mandate.id,
+        mandate.budgetUsd,
+        mandate.expiresAt,
+        JSON.stringify(mandate.allowedMerchants),
+        JSON.stringify(mandate.blocklistCategories),
+        mandate.maxItems,
+        mandate.revoked ? 1 : 0,
+        mandate.createdAt,
+      );
+    },
+
+    getMandate(id: string): MandateRow | null {
+      const row = db.prepare("SELECT * FROM mandates WHERE id = ?").get(id) as
+        | {
+            id: string;
+            budget_usd: number;
+            expires_at: string | null;
+            allowed_merchants: string;
+            blocklist_categories: string;
+            max_items: number | null;
+            revoked: number;
+            created_at: string;
+          }
+        | undefined;
+      if (row === undefined) return null;
+      return {
+        id: row.id,
+        budgetUsd: row.budget_usd,
+        expiresAt: row.expires_at,
+        allowedMerchants: JSON.parse(row.allowed_merchants) as string[],
+        blocklistCategories: JSON.parse(row.blocklist_categories) as string[],
+        maxItems: row.max_items,
+        revoked: row.revoked === 1,
+        createdAt: row.created_at,
+      };
+    },
+
+    listMandates(): MandateRow[] {
+      const rows = db.prepare("SELECT * FROM mandates ORDER BY created_at DESC").all() as Array<Record<string, unknown>>;
+      return rows.map((r) => {
+        const parsed = this as unknown as CartGuardDb;
+        void parsed;
+        return {
+          id: String(r.id),
+          budgetUsd: Number(r.budget_usd),
+          expiresAt: r.expires_at === null ? null : String(r.expires_at),
+          allowedMerchants: JSON.parse(String(r.allowed_merchants)) as string[],
+          blocklistCategories: JSON.parse(String(r.blocklist_categories)) as string[],
+          maxItems: r.max_items === null ? null : Number(r.max_items),
+          revoked: Number(r.revoked) === 1,
+          createdAt: String(r.created_at),
+        };
+      });
+    },
+
+    revokeMandate(id: string): void {
+      db.prepare("UPDATE mandates SET revoked = 1 WHERE id = ?").run(id);
+    },
+
+    countCapturedItems(mandateId: string): number {
+      const row = db
+        .prepare("SELECT COUNT(DISTINCT request_id) AS n FROM audit WHERE mandate_id = ? AND paypal_status = 'CAPTURED'")
+        .get(mandateId) as { n: number };
+      return row.n;
+    },
+
+    spentUnderMandate(mandateId: string): number {
+      const row = db
+        .prepare("SELECT COALESCE(SUM(price_usd), 0) AS total FROM audit WHERE mandate_id = ? AND paypal_status = 'CAPTURED'")
+        .get(mandateId) as { total: number };
+      return row.total;
+    },
+
     requestsCreatedSince(iso: string): number {
       const row = db
         .prepare("SELECT COUNT(*) AS n FROM requests WHERE created_at >= ?")
@@ -295,6 +414,7 @@ function rowToAudit(row: Record<string, unknown>): AuditRow {
     llmRationale: row.llm_rationale === null ? null : String(row.llm_rationale),
     paypalOrderId: row.paypal_order_id === null ? null : String(row.paypal_order_id),
     paypalStatus: row.paypal_status === null ? null : String(row.paypal_status),
+    mandateId: row.mandate_id === null || row.mandate_id === undefined ? null : String(row.mandate_id),
     ts: String(row.ts),
   };
 }

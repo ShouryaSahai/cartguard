@@ -412,6 +412,49 @@ describe("server: mutating-endpoint auth", () => {
   });
 });
 
+describe("server: spending mandates", () => {
+  it("create -> gated purchase references the mandate -> revoke blocks the next one", async () => {
+    process.env.ADMIN_TOKEN = "test-admin-token";
+    try {
+      const harness = await startServer();
+      const headers = { "Content-Type": "application/json", "x-admin-token": "test-admin-token" };
+      const created = await fetch(`${harness.baseUrl}/mandates`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ budgetUsd: 100, maxItems: 2 }),
+      });
+      expect(created.status).toBe(201);
+      const mandate = (await created.json()) as { id: string };
+
+      const first = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60, mandate_id: mandate.id });
+      expect((await waitForStatus(harness.baseUrl, first.id)).status).toBe("captured");
+
+      // Mandate budget 100: 21.99 captured once; second still fits.
+      const second = await createRequest(harness.baseUrl, { goal: "earbuds again", budget: 60, mandate_id: mandate.id });
+      expect((await waitForStatus(harness.baseUrl, second.id)).status).toBe("captured");
+
+      await fetch(`${harness.baseUrl}/mandates/${mandate.id}/revoke`, { method: "POST", headers });
+      const third = await createRequest(harness.baseUrl, { goal: "earbuds after revoke", budget: 60, mandate_id: mandate.id });
+      const detail = (await (await fetch(`${harness.baseUrl}/requests/${third.id}`)).json()) as {
+        request: { status: string };
+        audit: Array<{ mandateId: string | null; reasons: Array<{ rule: string }> }>;
+      };
+      expect(detail.request.status).toBe("blocked");
+      expect(detail.audit.some((row) => row.mandateId === mandate.id)).toBe(true);
+      expect(detail.audit.some((row) => row.reasons.some((reason) => reason.rule === "mandate_revoked"))).toBe(true);
+
+      const unknown = await fetch(`${harness.baseUrl}/requests`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ goal: "earbuds", budget: 60, mandate_id: "00000000-0000-4000-8000-000000000000" }),
+      });
+      expect(unknown.status).toBe(400);
+    } finally {
+      delete process.env.ADMIN_TOKEN;
+    }
+  });
+});
+
 describe("server: /paypal/return hardening", () => {
   async function makePending(baseUrl: string): Promise<{ id: string; token: string; orderId: string }> {
     const harness = running[running.length - 1]!;

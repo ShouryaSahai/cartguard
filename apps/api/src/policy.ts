@@ -1,5 +1,6 @@
 import { strictest } from "@cartguard/shared";
 import type {
+  MandateRuntime,
   NormalizedProduct,
   PolicyConfig,
   PolicyInput,
@@ -19,6 +20,12 @@ export const RULES = {
   productUnavailable: "product_unavailable",
   goalMismatch: "goal_mismatch",
   nonUsdOffer: "non_usd_offer",
+  mandateRevoked: "mandate_revoked",
+  mandateExpired: "mandate_expired",
+  mandateExhausted: "mandate_exhausted",
+  mandateBudget: "mandate_budget_exceeded",
+  mandateMerchant: "mandate_merchant",
+  mandateCategory: "mandate_category",
 } as const;
 
 function usd(amount: number): string {
@@ -112,6 +119,57 @@ export function evaluatePolicy(input: PolicyInput, config: PolicyConfig): Policy
       outcome: "needs_approval",
       message: `Agent pick may not match the goal: similarity ${input.goalMatchScore.toFixed(2)} is below the ${config.goalMatchThreshold} threshold.`,
     });
+  }
+
+  // Spending-mandate rules (additive): an expired, revoked, or exhausted
+  // mandate blocks; a merchant outside the mandate's allowlist escalates.
+  const mandate: MandateRuntime | null = input.mandate ?? null;
+  if (mandate !== null) {
+    if (mandate.revoked) {
+      reasons.push({
+        rule: RULES.mandateRevoked,
+        outcome: "blocked",
+        message: `Mandate ${mandate.id} is revoked or missing.`,
+      });
+    }
+    if (mandate.expiresAt !== null && mandate.nowIso > mandate.expiresAt) {
+      reasons.push({
+        rule: RULES.mandateExpired,
+        outcome: "blocked",
+        message: `Mandate ${mandate.id} expired at ${mandate.expiresAt}.`,
+      });
+    }
+    if (mandate.maxItems !== null && mandate.itemsUsed >= mandate.maxItems) {
+      reasons.push({
+        rule: RULES.mandateExhausted,
+        outcome: "blocked",
+        message: `Mandate ${mandate.id} is exhausted: ${mandate.itemsUsed} of ${mandate.maxItems} allowed items used.`,
+      });
+    }
+    if (mandate.spentUnderMandate + price > mandate.budgetUsd) {
+      reasons.push({
+        rule: RULES.mandateBudget,
+        outcome: "blocked",
+        message: `Mandate ${mandate.id} budget exceeded: ${usd(mandate.spentUnderMandate)} spent plus ${usd(price)} would pass ${usd(mandate.budgetUsd)}.`,
+      });
+    }
+    if (
+      mandate.allowedMerchants.length > 0 &&
+      !mandate.allowedMerchants.some((m) => m.toLowerCase() === merchant)
+    ) {
+      reasons.push({
+        rule: RULES.mandateMerchant,
+        outcome: "needs_approval",
+        message: `Merchant "${best?.domain ?? ""}" is outside mandate ${mandate.id}'s allowlist.`,
+      });
+    }
+    if (mandate.blocklistCategories.some((c) => c.toLowerCase() === category)) {
+      reasons.push({
+        rule: RULES.mandateCategory,
+        outcome: "blocked",
+        message: `Category "${product.categorySlug}" is blocklisted by mandate ${mandate.id}.`,
+      });
+    }
   }
 
   const verdict = reasons.reduce<Verdict>(

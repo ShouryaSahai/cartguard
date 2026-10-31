@@ -9,7 +9,7 @@ import { z } from "zod";
 import { PolicyConfigSchema } from "@cartguard/shared";
 import { runAgent } from "./agent.js";
 import { createChannel3Client, type Channel3Client } from "./channel3.js";
-import { openDb, type CartGuardDb, type RequestStatus } from "./db.js";
+import { openDb, type CartGuardDb, type MandateRow, type RequestStatus } from "./db.js";
 import "./env.js";
 import { createLlmCompleter, type ChatCompleter } from "./llm.js";
 import { createMockChannel3, createMockLlm, createMockPaypal } from "./mockRails.js";
@@ -30,6 +30,7 @@ const GateProposeSchema = z.object({
   goal: z.string().min(1).max(500),
   budget: z.number().positive().max(1_000_000),
   search_median_price: z.number().positive().nullable().optional(),
+  mandate_id: z.string().uuid().nullable().optional(),
   proposal: z.object({
     product_id: z.string().min(1),
     stated_price: z.number().nonnegative().nullable().optional(),
@@ -38,9 +39,18 @@ const GateProposeSchema = z.object({
   }),
 });
 
+const CreateMandateSchema = z.object({
+  budgetUsd: z.number().positive().max(1_000_000),
+  expiresAt: z.string().datetime().nullable().optional(),
+  allowedMerchants: z.array(z.string()).optional(),
+  blocklistCategories: z.array(z.string()).optional(),
+  maxItems: z.number().int().positive().nullable().optional(),
+});
+
 const CreateRequestSchema = z.object({
   goal: z.string().min(3).max(500),
   budget: z.number().positive().max(1_000_000),
+  mandate_id: z.string().uuid().nullable().optional(),
 });
 
 const TERMINAL_STATUSES: RequestStatus[] = [
@@ -125,6 +135,13 @@ export function createApp(deps: ServerDeps): Express {
     const id = randomUUID();
     const requestToken = randomBytes(24).toString("hex");
     deps.db.createRequest(id, parsed.data.goal, parsed.data.budget, hashRequestToken(requestToken));
+    if (parsed.data.mandate_id !== undefined && parsed.data.mandate_id !== null) {
+      if (deps.db.getMandate(parsed.data.mandate_id) === null) {
+        res.status(400).json({ error: "unknown_mandate", mandateId: parsed.data.mandate_id });
+        return;
+      }
+      deps.db.setRequestMandate(id, parsed.data.mandate_id);
+    }
     startRequestProcessing(id, parsed.data.goal, parsed.data.budget, deps);
     res.status(201).json({ id, requestToken });
   });
@@ -284,6 +301,11 @@ export function createApp(deps: ServerDeps): Express {
     const requestToken = randomBytes(24).toString("hex");
     deps.db.createRequest(id, parsed.data.goal, parsed.data.budget, hashRequestToken(requestToken));
     deps.db.setRequestStatus(id, "running");
+    const mandateId = parsed.data.mandate_id ?? null;
+    if (mandateId !== null && deps.db.getMandate(mandateId) === null) {
+      res.status(400).json({ error: "unknown_mandate", mandateId });
+      return;
+    }
     try {
       const result = await executeProposal(
         deps,
@@ -297,6 +319,7 @@ export function createApp(deps: ServerDeps): Express {
           goalMatchScore: parsed.data.proposal.goal_match_score,
         },
         parsed.data.search_median_price ?? null,
+        mandateId,
       );
       res.json({
         requestId: id,
@@ -312,6 +335,58 @@ export function createApp(deps: ServerDeps): Express {
       deps.db.finishRequest(id, "failed", null, null, null);
       res.status(500).json({ error: "gate_execution_failed", detail: error instanceof Error ? error.message : String(error) });
     }
+  });
+
+  app.post("/mandates", (req, res) => {
+    const adminToken = process.env.ADMIN_TOKEN ?? "";
+    if (adminToken === "") {
+      res.status(403).json({ error: "admin_token_not_configured" });
+      return;
+    }
+    if (req.header("x-admin-token") !== adminToken) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const parsed = CreateMandateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_body", detail: z.treeifyError(parsed.error) });
+      return;
+    }
+    const id = randomUUID();
+    const mandate: MandateRow = {
+      id,
+      budgetUsd: parsed.data.budgetUsd,
+      expiresAt: parsed.data.expiresAt ?? null,
+      allowedMerchants: parsed.data.allowedMerchants ?? [],
+      blocklistCategories: parsed.data.blocklistCategories ?? [],
+      maxItems: parsed.data.maxItems ?? null,
+      revoked: false,
+      createdAt: new Date().toISOString(),
+    };
+    deps.db.createMandate(mandate);
+    res.status(201).json(mandate);
+  });
+
+  app.get("/mandates", (_req, res) => {
+    res.json({ mandates: deps.db.listMandates() });
+  });
+
+  app.post("/mandates/:id/revoke", (req, res) => {
+    const adminToken = process.env.ADMIN_TOKEN ?? "";
+    if (adminToken === "") {
+      res.status(403).json({ error: "admin_token_not_configured" });
+      return;
+    }
+    if (req.header("x-admin-token") !== adminToken) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (deps.db.getMandate(req.params.id ?? "") === null) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    deps.db.revokeMandate(req.params.id ?? "");
+    res.json({ id: req.params.id, revoked: true });
   });
 
   app.get("/audit", (req, res) => {

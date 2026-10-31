@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluatePolicy } from "../src/policy.js";
 import type {
+  MandateRuntime,
   NormalizedProduct,
   Offer,
   PolicyConfig,
@@ -242,6 +243,85 @@ describe("policy: currency rule", () => {
     const p = product({ bestOffer: offer({ currency: "GBP", price: 10 }) });
     const result = evaluatePolicy(input({ product: p, budget: 60, goalMatchScore: 0.99 }), CONFIG);
     expect(result.verdict).toBe("blocked");
+  });
+});
+
+describe("policy: spending mandates (additive rules)", () => {
+  const NOW = "2026-11-01T12:00:00.000Z";
+  function mandate(overrides: Partial<MandateRuntime> = {}): MandateRuntime {
+    return {
+      id: "m-1",
+      budgetUsd: 100,
+      expiresAt: null,
+      revoked: false,
+      maxItems: null,
+      itemsUsed: 0,
+      spentUnderMandate: 0,
+      allowedMerchants: [],
+      blocklistCategories: [],
+      nowIso: NOW,
+      ...overrides,
+    };
+  }
+
+  it("blocks a revoked mandate", () => {
+    const result = evaluatePolicy(input({ mandate: mandate({ revoked: true }) }), CONFIG);
+    expect(result.verdict).toBe("blocked");
+    expect(result.reasons.some((r) => r.rule === "mandate_revoked")).toBe(true);
+  });
+
+  it("blocks an expired mandate", () => {
+    const result = evaluatePolicy(
+      input({ mandate: mandate({ expiresAt: "2026-10-01T00:00:00.000Z" }) }),
+      CONFIG,
+    );
+    expect(result.verdict).toBe("blocked");
+    expect(result.reasons.some((r) => r.rule === "mandate_expired")).toBe(true);
+  });
+
+  it("auto_pays inside the mandate window", () => {
+    const result = evaluatePolicy(
+      input({ mandate: mandate({ expiresAt: "2026-12-01T00:00:00.000Z" }) }),
+      CONFIG,
+    );
+    expect(result.verdict).toBe("auto_pay");
+  });
+
+  it("blocks when max items is exhausted", () => {
+    const result = evaluatePolicy(
+      input({ mandate: mandate({ maxItems: 2, itemsUsed: 2 }) }),
+      CONFIG,
+    );
+    expect(result.verdict).toBe("blocked");
+    expect(result.reasons.some((r) => r.rule === "mandate_exhausted")).toBe(true);
+  });
+
+  it("blocks when the mandate budget would be exceeded", () => {
+    const result = evaluatePolicy(
+      input({ mandate: mandate({ budgetUsd: 40 }) }),
+      CONFIG,
+    );
+    expect(result.verdict).toBe("blocked");
+    expect(result.reasons.some((r) => r.rule === "mandate_budget_exceeded")).toBe(true);
+  });
+
+  it("needs approval for a merchant outside the mandate allowlist", () => {
+    const result = evaluatePolicy(
+      input({ mandate: mandate({ allowedMerchants: ["macys.com"] }) }),
+      CONFIG,
+    );
+    expect(result.verdict).toBe("needs_approval");
+    expect(result.reasons.some((r) => r.rule === "mandate_merchant")).toBe(true);
+  });
+
+  it("blocks a mandate-blocklisted category", () => {
+    const p = product({ categorySlug: "tobacco" });
+    const result = evaluatePolicy(
+      input({ product: p, mandate: mandate({ blocklistCategories: ["tobacco"] }) }),
+      CONFIG,
+    );
+    expect(result.verdict).toBe("blocked");
+    expect(result.reasons.some((r) => r.rule === "mandate_category")).toBe(true);
   });
 });
 

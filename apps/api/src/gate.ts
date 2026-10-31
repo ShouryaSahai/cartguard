@@ -1,4 +1,5 @@
 import type {
+  MandateRuntime,
   NormalizedProduct,
   PolicyConfig,
   PolicyReason,
@@ -24,6 +25,7 @@ export interface GateInput {
   spentThisWeek: number;
   searchMedianPrice: number | null;
   config: PolicyConfig;
+  mandate?: MandateRuntime | null;
 }
 
 export interface GateDecision {
@@ -65,6 +67,7 @@ export async function decidePurchase(input: GateInput, deps: GateDeps): Promise<
       spentThisWeek: input.spentThisWeek,
       searchMedianPrice: input.searchMedianPrice,
       goalMatchScore: input.proposal.goalMatchScore,
+      mandate: input.mandate ?? null,
     },
     input.config,
   );

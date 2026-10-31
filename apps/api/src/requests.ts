@@ -4,7 +4,7 @@ import type { CartGuardDb, RequestStatus } from "./db.js";
 import type { Channel3Client } from "./channel3.js";
 import type { ChatCompleter } from "./llm.js";
 import type { PaypalOrders } from "./paypal.js";
-import type { PolicyReason, PurchaseProposal, Verdict } from "@cartguard/shared";
+import type { MandateRuntime, PolicyReason, PurchaseProposal, Verdict } from "@cartguard/shared";
 
 export interface PipelineDeps {
   db: CartGuardDb;
@@ -30,6 +30,38 @@ export interface GateExecutionResult {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Loads the mandate and stamps the runtime view the policy evaluates. A
+ * referenced-but-missing mandate is treated as revoked (blocks the purchase). */
+function buildMandateView(deps: PipelineDeps, mandateId: string): MandateRuntime {
+  const row = deps.db.getMandate(mandateId);
+  if (row === null) {
+    return {
+      id: mandateId,
+      budgetUsd: 0,
+      expiresAt: null,
+      revoked: true,
+      maxItems: null,
+      itemsUsed: 0,
+      spentUnderMandate: 0,
+      allowedMerchants: [],
+      blocklistCategories: [],
+      nowIso: new Date().toISOString(),
+    };
+  }
+  return {
+    id: row.id,
+    budgetUsd: row.budgetUsd,
+    expiresAt: row.expiresAt,
+    revoked: row.revoked,
+    maxItems: row.maxItems,
+    itemsUsed: deps.db.countCapturedItems(row.id),
+    spentUnderMandate: deps.db.spentUnderMandate(row.id),
+    allowedMerchants: row.allowedMerchants,
+    blocklistCategories: row.blocklistCategories,
+    nowIso: new Date().toISOString(),
+  };
 }
 
 /** Best-effort: after a completed store-in-vault capture, save the payment
@@ -74,6 +106,7 @@ export async function processRequest(
   deps: PipelineDeps,
 ): Promise<void> {
   deps.db.setRequestStatus(requestId, "running");
+  const mandateId = deps.db.getRequest(requestId)?.mandateId ?? null;
 
   const outcome = await runAgent(goal, budget, { llm: deps.llm, channel3: deps.channel3 });
   deps.db.setRequestTrace(requestId, outcome.trace);
@@ -96,7 +129,7 @@ export async function processRequest(
     return;
   }
 
-  await executeProposal(deps, requestId, goal, budget, outcome.proposal, outcome.searchMedianPrice);
+  await executeProposal(deps, requestId, goal, budget, outcome.proposal, outcome.searchMedianPrice, mandateId);
 }
 
 /** The gate + payment execution shared by the internal agent pipeline and the
@@ -108,8 +141,10 @@ export async function executeProposal(
   budget: number,
   proposal: PurchaseProposal,
   searchMedianPrice: number | null,
+  mandateId: string | null = null,
 ): Promise<GateExecutionResult> {
   const config = deps.db.getPolicy();
+  const mandate: MandateRuntime | null = mandateId === null ? null : buildMandateView(deps, mandateId);
   const decision = await decidePurchase(
     {
       goal,
@@ -118,6 +153,7 @@ export async function executeProposal(
       spentThisWeek: deps.db.weeklyCapturedSpend(new Date()),
       searchMedianPrice,
       config,
+      mandate,
     },
     { channel3: deps.channel3 },
   );
@@ -125,6 +161,7 @@ export async function executeProposal(
   const verified = decision.verifiedProduct;
   deps.db.appendAudit({
     requestId,
+    mandateId,
     step: "gate",
     productId: verified?.id ?? proposal.productId,
     merchant: verified?.bestOffer?.domain ?? null,
@@ -147,6 +184,7 @@ export async function executeProposal(
     deps.db.finishRequest(requestId, "needs_approval", verified, null, null);
     deps.db.appendAudit({
       requestId,
+      mandateId,
       step: "payment",
       productId: verified?.id ?? null,
       merchant: verified?.bestOffer?.domain ?? null,
@@ -181,6 +219,7 @@ export async function executeProposal(
         deps.db.finishRequest(requestId, "captured", verified, order.orderId, null);
         deps.db.appendAudit({
           requestId,
+          mandateId,
           step: "payment",
           productId: verified?.id ?? null,
           merchant: verified?.bestOffer?.domain ?? null,
@@ -202,6 +241,7 @@ export async function executeProposal(
           deps.db.finishRequest(requestId, "captured", verified, order.orderId, null);
           deps.db.appendAudit({
             requestId,
+            mandateId,
             step: "payment",
             productId: verified?.id ?? null,
             merchant: verified?.bestOffer?.domain ?? null,
@@ -219,6 +259,7 @@ export async function executeProposal(
         deps.db.finishRequest(requestId, "needs_approval", verified, order.orderId, order.approvalUrl);
         deps.db.appendAudit({
           requestId,
+          mandateId,
           step: "payment",
           productId: verified?.id ?? null,
           merchant: verified?.bestOffer?.domain ?? null,
@@ -234,6 +275,7 @@ export async function executeProposal(
         deps.db.finishRequest(requestId, "needs_approval", verified, order.orderId, order.approvalUrl);
         deps.db.appendAudit({
           requestId,
+          mandateId,
           step: "payment",
           productId: verified?.id ?? null,
           merchant: verified?.bestOffer?.domain ?? null,
@@ -251,6 +293,7 @@ export async function executeProposal(
     deps.db.finishRequest(requestId, "needs_approval", verified, order.orderId, order.approvalUrl);
     deps.db.appendAudit({
       requestId,
+      mandateId,
       step: "payment",
       productId: verified?.id ?? null,
       merchant: verified?.bestOffer?.domain ?? null,
@@ -266,6 +309,7 @@ export async function executeProposal(
     deps.db.finishRequest(requestId, "failed", verified, null, null);
     deps.db.appendAudit({
       requestId,
+      mandateId,
       step: "payment",
       productId: verified?.id ?? null,
       merchant: verified?.bestOffer?.domain ?? null,

@@ -1005,7 +1005,7 @@ export const ATTACKS: RedTeamAttack[] = [
 
 export async function runRedTeam(): Promise<RedTeamResult[]> {
   const results: RedTeamResult[] = [];
-  for (const attack of [...ATTACKS, ...GATE_API_ATTACKS]) {
+  for (const attack of [...ATTACKS, ...GATE_API_ATTACKS, ...MANDATE_ATTACKS]) {
     try {
       const detail = await attack.run();
       results.push({ id: attack.id, category: attack.category, name: attack.name, passed: true, detail });
@@ -1111,6 +1111,152 @@ export const GATE_API_ATTACKS: RedTeamAttack[] = [
       } finally {
         api.close();
       }
+    },
+  },
+];
+
+// ---- Category: mandates ----------------------------------------------------
+
+export const MANDATE_ATTACKS: RedTeamAttack[] = [
+  {
+    id: "MND-01",
+    category: "mandates",
+    name: "Expired mandate blocks the purchase through the full pipeline",
+    run: async () => {
+      const db = openDb(":memory:");
+      db.createMandate({
+        id: "m-expired",
+        budgetUsd: 100,
+        expiresAt: "2026-01-01T00:00:00.000Z",
+        allowedMerchants: [],
+        blocklistCategories: [],
+        maxItems: null,
+        revoked: false,
+        createdAt: "2025-12-01T00:00:00.000Z",
+      });
+      db.createRequest("m1", "goal", 60, REDTEAM_SECRET_HASH);
+      db.setRequestMandate("m1", "m-expired");
+      await processRequest("m1", "goal", 60, {
+        db,
+        llm: scriptedLlm([PROPOSE_OK("h1")]),
+        channel3: channel3With(product("h1", 30)),
+        paypal: recordingPaypal(),
+        publicBaseUrl: "http://localhost:3000",
+        brandName: "CartGuard",
+      });
+      const row = db.getRequest("m1");
+      assert(row?.status === "blocked", `got ${String(row?.status)}`);
+      return "expired mandate -> blocked";
+    },
+  },
+  {
+    id: "MND-02",
+    category: "mandates",
+    name: "Revoked mandate blocks even a previously-working purchase",
+    run: async () => {
+      const db = openDb(":memory:");
+      db.createMandate({
+        id: "m-revoked",
+        budgetUsd: 100,
+        expiresAt: null,
+        allowedMerchants: [],
+        blocklistCategories: [],
+        maxItems: null,
+        revoked: true,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      db.createRequest("m1", "goal", 60, REDTEAM_SECRET_HASH);
+      db.setRequestMandate("m1", "m-revoked");
+      await processRequest("m1", "goal", 60, {
+        db,
+        llm: scriptedLlm([PROPOSE_OK("h1")]),
+        channel3: channel3With(product("h1", 30)),
+        paypal: recordingPaypal(),
+        publicBaseUrl: "http://localhost:3000",
+        brandName: "CartGuard",
+      });
+      const row = db.getRequest("m1");
+      assert(row?.status === "blocked", `got ${String(row?.status)}`);
+      return "revoked mandate -> blocked";
+    },
+  },
+  {
+    id: "MND-03",
+    category: "mandates",
+    name: "Exhausted mandate (max items) blocks the next purchase",
+    run: async () => {
+      const db = openDb(":memory:");
+      db.createMandate({
+        id: "m-max",
+        budgetUsd: 1000,
+        expiresAt: null,
+        allowedMerchants: [],
+        blocklistCategories: [],
+        maxItems: 1,
+        revoked: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      db.createRequest("m1", "goal", 60, REDTEAM_SECRET_HASH);
+      db.setRequestMandate("m1", "m-max");
+      await processRequest("m1", "goal", 60, {
+        db,
+        llm: scriptedLlm([PROPOSE_OK("h1")]),
+        channel3: channel3With(product("h1", 30)),
+        paypal: recordingPaypal(),
+        publicBaseUrl: "http://localhost:3000",
+        brandName: "CartGuard",
+      });
+      assert(db.getRequest("m1")?.status === "captured", "first purchase should capture");
+      db.createRequest("m2", "goal", 60, REDTEAM_SECRET_HASH);
+      db.setRequestMandate("m2", "m-max");
+      await processRequest("m2", "goal", 60, {
+        db,
+        llm: scriptedLlm([PROPOSE_OK("h1")]),
+        channel3: channel3With(product("h1", 30)),
+        paypal: recordingPaypal(),
+        publicBaseUrl: "http://localhost:3000",
+        brandName: "CartGuard",
+      });
+      assert(db.getRequest("m2")?.status === "blocked", `got ${String(db.getRequest("m2")?.status)}`);
+      return "1 of 1 items used -> second purchase blocked";
+    },
+  },
+  {
+    id: "MND-04",
+    category: "mandates",
+    name: "Mandate budget exhaustion blocks mid-mandate (21.99 x 5 > $100)",
+    run: async () => {
+      const db = openDb(":memory:");
+      db.createMandate({
+        id: "m-budget",
+        budgetUsd: 100,
+        expiresAt: null,
+        allowedMerchants: [],
+        blocklistCategories: [],
+        maxItems: null,
+        revoked: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      const deps = {
+        db,
+        llm: scriptedLlm([PROPOSE_OK("h1")]),
+        channel3: channel3With(product("h1", 21.99)),
+        paypal: recordingPaypal(),
+        publicBaseUrl: "http://localhost:3000",
+        brandName: "CartGuard",
+      };
+      for (const [index, requestId] of ["b1", "b2", "b3", "b4", "b5"].entries()) {
+        db.createRequest(requestId, "goal", 60, REDTEAM_SECRET_HASH);
+        db.setRequestMandate(requestId, "m-budget");
+        await processRequest(requestId, "goal", 60, { ...deps, llm: scriptedLlm([PROPOSE_OK("h1")]) });
+        const status = db.getRequest(requestId)?.status;
+        if (index < 4) {
+          assert(status === "captured", `purchase ${index + 1}: ${String(status)}`);
+        } else {
+          assert(status === "blocked", `purchase 5: ${String(status)} (87.96 spent + 21.99 > 100)`);
+        }
+      }
+      return "4 captured, 5th blocked by mandate budget";
     },
   },
 ];

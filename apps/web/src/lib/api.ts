@@ -80,6 +80,18 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
   return schema.parse(await response.json());
 }
 
+export const MandateSchema = z.object({
+  id: z.string(),
+  budgetUsd: z.number(),
+  expiresAt: z.string().nullable(),
+  allowedMerchants: z.array(z.string()),
+  blocklistCategories: z.array(z.string()),
+  maxItems: z.number().nullable(),
+  revoked: z.boolean(),
+  createdAt: z.string(),
+});
+export type Mandate = z.infer<typeof MandateSchema>;
+
 export const api = {
   async health(): Promise<{ ok: boolean; paypal: string }> {
     return request(
@@ -111,6 +123,25 @@ export const api = {
   },
   async audit(limit = 500): Promise<{ rows: AuditRow[] }> {
     return request(`/audit?limit=${limit}`, z.object({ rows: z.array(AuditRowSchema) }));
+  },
+  async listMandates(): Promise<{ mandates: Mandate[] }> {
+    return request("/mandates", z.object({ mandates: z.array(MandateSchema) }));
+  },
+  async createMandate(
+    mandate: { budgetUsd: number; expiresAt: string | null; allowedMerchants: string[]; blocklistCategories: string[]; maxItems: number | null },
+    adminToken: string,
+  ): Promise<Mandate> {
+    return request("/mandates", MandateSchema, {
+      method: "POST",
+      body: JSON.stringify(mandate),
+      headers: { "x-admin-token": adminToken },
+    });
+  },
+  async revokeMandate(id: string, adminToken: string): Promise<{ revoked: boolean }> {
+    return request(`/mandates/${encodeURIComponent(id)}/revoke`, z.object({ revoked: z.boolean() }), {
+      method: "POST",
+      headers: { "x-admin-token": adminToken },
+    });
   },
   async getPolicy(): Promise<PolicyConfig> {
     return request("/policy", PolicySchema);
