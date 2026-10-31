@@ -25,6 +25,28 @@ explainable. The LLM has no tool that can move money.
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Architecture
+
+```mermaid
+flowchart TB
+    B["Browser — React · AG Grid · AG Charts<br/>request box · live reasoning · approval card · policy editor"]
+    B -->|"POST /requests"| API["Express API (TypeScript)"]
+    API --> AGENT["Agent runner — LLM tool calling<br/>search_products · get_product · propose_purchase<br/>✗ no pay tool"]
+    AGENT --> C3["Channel3 — product search +<br/>price re-verification (the gate's source of truth)"]
+    AGENT -->|"propose (zod-validated)"| GATE["POLICY GATE (pure code)<br/>budget · caps · currency · availability ·<br/>allowlists · categories · mandates"]
+    GATE -->|"auto_pay"| PP["PayPal Orders v2 (sandbox only)<br/>vault token cycle"]
+    GATE -->|"needs_approval"| HUMAN["Human decision<br/>approve / reject / PayPal return"]
+    HUMAN --> PP
+    GATE -->|"blocked"| AUDIT[("SQLite audit")]
+    PP --> AUDIT
+    API --> GRID["AG Grid audit log + insights charts"]
+    subgraph "Gate as infrastructure"
+      MCP["MCP server<br/>propose_purchase tool"] -->|"x-api-key"| GATEAPI["POST /gate/propose"]
+      OTHER["Other agents<br/>examples/second-agent.mjs"] --> GATEAPI
+      GATEAPI --> GATE
+    end
+```
+
 ## Trust boundaries (the core of the pitch)
 
 1. **LLM output is schema-validated (zod).** It can only call `propose_purchase`.

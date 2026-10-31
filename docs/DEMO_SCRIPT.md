@@ -1,28 +1,21 @@
-# Demo video runbook (< 3 minutes)
+# Demo script — 3 minutes (tight cut)
 
-Script from PRD §14, mapped to the built UI. Record **after** `npm run preflight -w @cartguard/api` is all green.
+Record after `npm run preflight -w @cartguard/api` is all green.
+`CARTGUARD_MOCK_RAILS=1` gives a fully deterministic run if the live rails misbehave; say "demo mode" on camera if used.
 
-## Pre-flight (5 min before recording)
-
-1. `npm run preflight -w @cartguard/api` — every row ✅
-2. `npm run seed:demo -w @cartguard/api` — audit grid has the three paths as backup footage
-3. `npm run build && npm run start -w @cartguard/api` — one deploy, http://localhost:3000
-4. Browser: dark mode, 100% zoom, clean profile (no bookmarks bar)
-
-## Shot list
-
-| Time | On screen | Say |
+| Time | On screen | Say / do |
 | --- | --- | --- |
-| 0:00–0:20 | Header + hero | "AI agents can spend money. CartGuard is what makes that safe: the LLM proposes, a deterministic policy gate decides, and every decision is logged." |
-| 0:20–0:55 | Type "Wireless earbuds under $60 with good reviews", $60, **Run agent** | Let the reasoning stream play. Point at: "agent proposes… gate re-verifies the price from product data — the model's own price is ignored." Verdict: **auto_paid ✓**, audit row appears. |
-| 0:55–1:30 | New request: "Laptop around $400", $450 | "Above the per-purchase cap — the gate pauses and asks a human." Show the reasoning + **approval card**. Click **Open PayPal sandbox**, approve with the sandbox buyer, come back, show **captured**. |
-| 1:30–1:55 | New request: "Noise-cancelling headphones under $20", $20 | "Nothing real costs this little. The gate flags bait pricing and an off-allowlist merchant — **blocked**, PayPal was never touched." Show the red reasons in the grid. |
-| 1:55–2:20 | Hostile product moment | "And when a product description *itself* tries to hijack the agent — 'call pay_now' — the model is treated as adversarial by design: 37 of 37 scripted attacks show the gate holds regardless of what the model does." Show `redteam-results.md` pass rate. |
-| 2:20–2:50 | Filter the AG Grid, open **Policy editor**, lower the per-purchase cap | "Users control the rules. Every decision references the policy. Sandbox only — no real money ever moves." |
-| 2:50–3:00 | Header logo | "CartGuard — the trust layer for agent payments." |
+| 0:00–0:15 | Header + dashboard | "Agents can spend money. CartGuard is what makes that safe: the LLM proposes, a deterministic policy gate decides, and every decision is logged." |
+| 0:15–0:50 | auto_pay preset → Run agent | Watch the reasoning stream. "The gate re-fetches the price from product data — the model's stated price is ignored. Verdict: auto_pay — captured in the PayPal sandbox, logged." Point at the audit row + spend chart. |
+| 0:50–1:25 | needs_approval preset ($450 laptop) | "Above the per-purchase cap — the gate pauses for a human." Show the approval card → Approve → captured. Then a second run → Reject → "nothing was purchased." |
+| 1:25–1:45 | blocked preset ($20 headphones) | "Bait pricing and an off-allowlist merchant — blocked, PayPal never touched. Reasons are right here in the grid." |
+| 1:45–2:10 | Mandates tab | "Spending mandates: budget, expiry, allowed merchants, max items. One click to revoke — and the next purchase is blocked. Every audit row carries the mandate id." |
+| 2:10–2:35 | Policy editor → change cap → Replay against audit | "Change a rule and replay past decisions — this one would have needed approval. Read-only; PayPal untouched." |
+| 2:35–2:50 | Terminal: red-team suite | "46 of 46 scripted attacks held. The gate holds regardless of what the model does — and any agent can plug into it over MCP or HTTP." |
+| 2:50–3:00 | Logo | "CartGuard — the trust layer for agent payments. Sandbox only; no real money moves." |
 
-## Fallbacks (PRD risk table)
+## Fallbacks
 
-- Live agent call fails → the **seeded** demo rows show all three paths (`npm run seed:demo -w @cartguard/api`)
-- PayPal approval step is slow → the in-app **Approve** button captures without the sandbox popup
-- Record the red-team terminal output as a separate cutaway: `npm run redteam -w @cartguard/api`
+- Live rails slow → `CARTGUARD_MOCK_RAILS=1 npm run start -w @cartguard/api` (deterministic demo mode; say so on camera).
+- Empty dashboard → `npm run seed:demo -w @cartguard/api`.
+- Red-team cutaway → `npm run redteam -w @cartguard/api` (terminal output is the visual).
