@@ -572,3 +572,43 @@ describe("server: abuse limits", () => {
     expect(detail.cap).toBe(1);
   });
 });
+
+describe("server: policy replay", () => {
+  it("shows which past verdicts would change under a draft policy, without touching PayPal", async () => {
+    process.env.ADMIN_TOKEN = "test-admin-token";
+    try {
+      const harness = await startServer();
+      const { id } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
+      await waitForStatus(harness.baseUrl, id); // auto_pay under cap 100
+      const before = (harness.deps.paypal as PaypalOrders & FakePaypalState).captures.length;
+
+      const response = await fetch(`${harness.baseUrl}/policy/replay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": "test-admin-token" },
+        body: JSON.stringify({ perPurchaseCap: 20, weeklyCap: 500 }),
+      });
+      expect(response.status).toBe(200);
+      const data = (await response.json()) as {
+        replays: Array<{ requestId: string; oldVerdict: string; newVerdict: string; changed: boolean }>;
+      };
+      const mine = data.replays.find((replay) => replay.requestId === id);
+      expect(mine).toBeDefined();
+      expect(mine!.oldVerdict).toBe("auto_pay");
+      expect(mine!.newVerdict).toBe("needs_approval");
+      expect(mine!.changed).toBe(true);
+
+      // Read-only: no extra PayPal traffic, original verdicts untouched.
+      const after = (harness.deps.paypal as PaypalOrders & FakePaypalState).captures.length;
+      expect(after).toBe(before);
+      const detail = (await (await fetch(`${harness.baseUrl}/requests/${id}`)).json()) as {
+        request: { status: string };
+      };
+      expect(detail.request.status).toBe("captured");
+
+      const unauth = await fetch(`${harness.baseUrl}/policy/replay`, { method: "POST", body: "{}" });
+      expect(unauth.status).toBe(401);
+    } finally {
+      delete process.env.ADMIN_TOKEN;
+    }
+  });
+});

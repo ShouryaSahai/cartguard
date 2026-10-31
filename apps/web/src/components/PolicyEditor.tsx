@@ -17,6 +17,8 @@ export function PolicyEditor() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [replays, setReplays] = useState<Array<{ requestId: string; oldVerdict: string; newVerdict: string; changed: boolean; skipped?: string }> | null>(null);
+  const [replayBusy, setReplayBusy] = useState(false);
 
   useEffect(() => {
     void (async () => {

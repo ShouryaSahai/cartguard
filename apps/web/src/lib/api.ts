@@ -143,6 +143,27 @@ export const api = {
       headers: { "x-admin-token": adminToken },
     });
   },
+  async replayPolicy(
+    draft: PolicyConfig,
+    adminToken: string,
+  ): Promise<{ replays: Array<{ requestId: string; oldVerdict: string; newVerdict: string; changed: boolean; skipped?: string; reasons?: string[] }> }> {
+    return request(
+      "/policy/replay",
+      z.object({
+        replays: z.array(
+          z.object({
+            requestId: z.string(),
+            oldVerdict: z.string(),
+            newVerdict: z.string(),
+            changed: z.boolean(),
+            skipped: z.string().optional(),
+            reasons: z.array(z.string()).optional(),
+          }),
+        ),
+      }),
+      { method: "POST", body: JSON.stringify(draft), headers: { "x-admin-token": adminToken } },
+    );
+  },
   async getPolicy(): Promise<PolicyConfig> {
     return request("/policy", PolicySchema);
   },

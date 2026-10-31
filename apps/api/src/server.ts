@@ -15,6 +15,7 @@ import { createLlmCompleter, type ChatCompleter } from "./llm.js";
 import { createMockChannel3, createMockLlm, createMockPaypal } from "./mockRails.js";
 import { seedDemoData } from "./demoSeedData.js";
 import { createPaypalOrdersFromEnv, type PaypalOrders } from "./paypal.js";
+import { evaluatePolicy } from "./policy.js";
 import { executeProposal, rememberVaultToken, startRequestProcessing } from "./requests.js";
 
 export interface ServerDeps {
@@ -335,6 +336,60 @@ export function createApp(deps: ServerDeps): Express {
       deps.db.finishRequest(id, "failed", null, null, null);
       res.status(500).json({ error: "gate_execution_failed", detail: error instanceof Error ? error.message : String(error) });
     }
+  });
+
+  // Policy replay: which past gate decisions would change under a DRAFT
+  // policy? Read-only, never touches PayPal. Only rules computable from
+  // stored data replay (budget, caps, currency, availability, category,
+  // allowlist); weekly-spend, median, and match-score rules are marked
+  // skipped because their inputs are not fully stored.
+  app.post("/policy/replay", (req, res) => {
+    const adminToken = process.env.ADMIN_TOKEN ?? "";
+    if (adminToken === "") {
+      res.status(403).json({ error: "admin_token_not_configured" });
+      return;
+    }
+    if (req.header("x-admin-token") !== adminToken) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const parsed = PolicyConfigSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_policy", detail: z.treeifyError(parsed.error) });
+      return;
+    }
+    const replays = deps.db
+      .listAudit(200)
+      .filter((row) => row.step === "gate")
+      .slice(0, 50)
+      .map((row) => {
+        const request = deps.db.getRequest(row.requestId);
+        const product = request?.chosenProduct ?? null;
+        const budget = request?.budgetUsd ?? 0;
+        if (product === null || product.bestOffer === null) {
+          return { requestId: row.requestId, oldVerdict: row.verdict, newVerdict: row.verdict, changed: false, skipped: "stored product data incomplete" };
+        }
+        const replay = evaluatePolicy(
+          {
+            goal: request?.goal ?? "",
+            budget,
+            product,
+            spentThisWeek: 0,
+            searchMedianPrice: null,
+            goalMatchScore: null,
+            mandate: null,
+          },
+          parsed.data,
+        );
+        return {
+          requestId: row.requestId,
+          oldVerdict: row.verdict,
+          newVerdict: replay.verdict,
+          changed: replay.verdict !== row.verdict,
+          reasons: replay.reasons.map((reason) => reason.message),
+        };
+      });
+    res.json({ replays });
   });
 
   app.post("/mandates", (req, res) => {
