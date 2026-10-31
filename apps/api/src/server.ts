@@ -12,6 +12,8 @@ import { createChannel3Client, type Channel3Client } from "./channel3.js";
 import { openDb, type CartGuardDb, type RequestStatus } from "./db.js";
 import "./env.js";
 import { createLlmCompleter, type ChatCompleter } from "./llm.js";
+import { createMockChannel3, createMockLlm, createMockPaypal } from "./mockRails.js";
+import { seedDemoData } from "./demoSeedData.js";
 import { createPaypalOrdersFromEnv, type PaypalOrders } from "./paypal.js";
 import { rememberVaultToken, startRequestProcessing } from "./requests.js";
 
@@ -85,6 +87,7 @@ export function createApp(deps: ServerDeps): Express {
   app.get("/health", (_req, res) => {
     res.json({
       ok: true,
+      mode: process.env.CARTGUARD_MOCK_RAILS === "1" ? "mock" : "live",
       paypal: deps.paypal === null ? "unavailable" : "configured",
       time: new Date().toISOString(),
     });
@@ -303,23 +306,33 @@ export function main(): void {
   const dbPath = process.env.DB_PATH ?? "data/cartguard.sqlite";
   mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
   const db = openDb(dbPath);
+  const mockRails = process.env.CARTGUARD_MOCK_RAILS === "1";
   let paypal: PaypalOrders | null = null;
-  try {
-    paypal = createPaypalOrdersFromEnv();
-  } catch {
-    paypal = null;
+  if (mockRails) {
+    paypal = createMockPaypal();
+  } else {
+    try {
+      paypal = createPaypalOrdersFromEnv();
+    } catch {
+      paypal = null;
+    }
+  }
+  // Keep the dashboard from looking empty: seed the demo dataset on first
+  // boot with an empty audit log (opt-out with CARTGUARD_SEED_DEMO=0).
+  if (process.env.CARTGUARD_SEED_DEMO !== "0" && db.listAudit(1).length === 0) {
+    seedDemoData(db);
   }
   const app = createApp({
     db,
-    llm: createLlmCompleter(),
-    channel3: createChannel3Client(),
+    llm: mockRails ? createMockLlm() : createLlmCompleter(),
+    channel3: mockRails ? createMockChannel3() : createChannel3Client(),
     paypal,
     publicBaseUrl: process.env.PUBLIC_BASE_URL ?? "http://localhost:3000",
     brandName: "CartGuard",
   });
   const port = Number(process.env.PORT ?? 3000);
   app.listen(port, () => {
-    console.log(`CartGuard API listening on :${port} (paypal: ${paypal === null ? "unavailable" : "configured"})`);
+    console.log(`CartGuard API listening on :${port} (mode: ${mockRails ? "mock" : "live"}, paypal: ${paypal === null ? "unavailable" : "configured"})`);
   });
 }
 

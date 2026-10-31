@@ -23,3 +23,8 @@ Thumbs.db
 
 # local tooling (gh binary)
 .tools/
+
+# playwright browsers (local)
+.tools/
+playwright-report/
+test-results/

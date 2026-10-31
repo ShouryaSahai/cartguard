@@ -68,8 +68,10 @@ const PolicySchema = z.object({
 
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     ...init,
+    // Spread init FIRST, then merge headers: caller headers (auth tokens) must
+    // not clobber the JSON content type, or the body never parses server-side.
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
