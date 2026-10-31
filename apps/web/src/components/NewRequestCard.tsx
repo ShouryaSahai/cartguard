@@ -8,7 +8,7 @@ const EXAMPLES: Array<{ label: string; goal: string; budget: number; path: strin
   { label: "blocked", goal: "Noise-cancelling headphones under $20", budget: 20, path: "nothing real costs this little" },
 ];
 
-export function NewRequestCard({ onCreated }: { onCreated: (id: string) => void }) {
+export function NewRequestCard({ onCreated }: { onCreated: (id: string, requestToken: string) => void }) {
   const [goal, setGoal] = useState("");
   const [budget, setBudget] = useState("60");
   const [submitting, setSubmitting] = useState(false);
@@ -23,8 +23,8 @@ export function NewRequestCard({ onCreated }: { onCreated: (id: string) => void 
     setSubmitting(true);
     setError(null);
     try {
-      const { id } = await api.createRequest(goal.trim(), parsedBudget);
-      onCreated(id);
+      const { id, requestToken } = await api.createRequest(goal.trim(), parsedBudget);
+      onCreated(id, requestToken);
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "Request failed");
     } finally {

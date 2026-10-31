@@ -49,7 +49,7 @@ export interface AuditRow extends AuditEntry {
 }
 
 export interface CartGuardDb {
-  createRequest(id: string, goal: string, budgetUsd: number): void;
+  createRequest(id: string, goal: string, budgetUsd: number, approvalSecretHash: string): void;
   setRequestStatus(id: string, status: RequestStatus): void;
   finishRequest(
     id: string,
@@ -60,6 +60,7 @@ export interface CartGuardDb {
   ): void;
   getRequest(id: string): RequestRow | null;
   setRequestTrace(id: string, trace: AgentStep[]): void;
+  getRequestApprovalSecretHash(id: string): string | null;
   appendAudit(entry: AuditEntry): void;
   auditForRequest(requestId: string): AuditRow[];
   listAudit(limit: number): AuditRow[];
@@ -83,6 +84,7 @@ function table(db: DatabaseSync): void {
       paypal_order_id TEXT,
       approval_url TEXT,
       trace_json TEXT,
+      approval_secret_hash TEXT,
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS audit (
@@ -115,18 +117,29 @@ function table(db: DatabaseSync): void {
 export function openDb(path: string): CartGuardDb {
   const db = new DatabaseSync(path);
   table(db);
-  // Lightweight migration for databases created before trace persistence.
-  try {
-    db.exec("ALTER TABLE requests ADD COLUMN trace_json TEXT");
-  } catch {
-    // Column already exists.
+  // Lightweight migrations for databases created before these columns existed.
+  for (const column of ["trace_json TEXT", "approval_secret_hash TEXT"]) {
+    try {
+      db.exec(`ALTER TABLE requests ADD COLUMN ${column}`);
+    } catch {
+      // Column already exists.
+    }
   }
 
   return {
-    createRequest(id: string, goal: string, budgetUsd: number): void {
+    createRequest(id: string, goal: string, budgetUsd: number, approvalSecretHash: string): void {
       db.prepare(
-        "INSERT INTO requests (id, goal, budget_usd, status, created_at) VALUES (?, ?, ?, 'queued', ?)",
-      ).run(id, goal, budgetUsd, new Date().toISOString());
+        "INSERT INTO requests (id, goal, budget_usd, status, approval_secret_hash, created_at) VALUES (?, ?, ?, 'queued', ?, ?)",
+      ).run(id, goal, budgetUsd, approvalSecretHash, new Date().toISOString());
+    },
+
+    getRequestApprovalSecretHash(id: string): string | null {
+      const row = db.prepare("SELECT approval_secret_hash FROM requests WHERE id = ?").get(id) as
+        | { approval_secret_hash: string | null }
+        | undefined;
+      return row === undefined || row.approval_secret_hash === null
+        ? null
+        : row.approval_secret_hash;
     },
 
     setRequestStatus(id: string, status: RequestStatus): void {

@@ -126,15 +126,15 @@ afterEach(() => {
   }
 });
 
-async function createRequest(baseUrl: string, body: object): Promise<string> {
+async function createRequest(baseUrl: string, body: object): Promise<{ id: string; token: string }> {
   const response = await fetch(`${baseUrl}/requests`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   expect(response.status).toBe(201);
-  const data = (await response.json()) as { id: string };
-  return data.id;
+  const data = (await response.json()) as { id: string; requestToken: string };
+  return { id: data.id, token: data.requestToken };
 }
 
 async function waitForStatus(baseUrl: string, id: string): Promise<{ status: string; approvalUrl: string | null }> {
@@ -175,7 +175,7 @@ describe("server: health and validation", () => {
 describe("server: the three demo paths", () => {
   it("auto_pay: agent proposes, gate verifies price 30 (not the LLM's 1), PayPal captures", async () => {
     const harness = await startServer();
-    const id = await createRequest(harness.baseUrl, { goal: "wireless earbuds under $60", budget: 60 });
+    const { id } = await createRequest(harness.baseUrl, { goal: "wireless earbuds under $60", budget: 60 });
     const { status } = await waitForStatus(harness.baseUrl, id);
     expect(status).toBe("captured");
     const detail = (await (await fetch(`${harness.baseUrl}/requests/${id}`)).json()) as {
@@ -191,7 +191,7 @@ describe("server: the three demo paths", () => {
 
   it("blocked: over-budget proposals never reach PayPal", async () => {
     const harness = await startServer();
-    const id = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 10 });
+    const { id } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 10 });
     const { status } = await waitForStatus(harness.baseUrl, id);
     expect(status).toBe("blocked");
     const paypalFake = harness.deps.paypal as PaypalOrders & { captures: string[] };
@@ -202,11 +202,11 @@ describe("server: the three demo paths", () => {
     const harness = await startServer({ paypal: fakePaypal() });
     const config = harness.db.getPolicy();
     harness.db.putPolicy({ ...config, perPurchaseCap: 20 });
-    const id = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 100 });
+    const { id, token } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 100 });
     const { status, approvalUrl } = await waitForStatus(harness.baseUrl, id);
     expect(status).toBe("needs_approval");
     expect(approvalUrl).toContain("paypal.com");
-    const approve = await fetch(`${harness.baseUrl}/requests/${id}/approve`, { method: "POST" });
+    const approve = await fetch(`${harness.baseUrl}/requests/${id}/approve`, { method: "POST", headers: { "x-request-token": token } });
     expect(approve.status).toBe(200);
     const approved = (await approve.json()) as { status: string };
     expect(approved.status).toBe("captured");
@@ -216,9 +216,9 @@ describe("server: the three demo paths", () => {
     const harness = await startServer();
     const config = harness.db.getPolicy();
     harness.db.putPolicy({ ...config, perPurchaseCap: 20 });
-    const id = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 100 });
+    const { id, token } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 100 });
     await waitForStatus(harness.baseUrl, id);
-    const reject = await fetch(`${harness.baseUrl}/requests/${id}/reject`, { method: "POST" });
+    const reject = await fetch(`${harness.baseUrl}/requests/${id}/reject`, { method: "POST", headers: { "x-request-token": token } });
     const data = (await reject.json()) as { status: string };
     expect(data.status).toBe("rejected");
     const paypalFake = harness.deps.paypal as PaypalOrders & { captures: string[] };
@@ -230,14 +230,14 @@ describe("server: the three demo paths", () => {
     const config = harness.db.getPolicy();
     harness.db.putPolicy({ ...config, weeklyCap: 5000, perPurchaseCap: 100 });
     const first = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
-    expect((await waitForStatus(harness.baseUrl, first)).status).toBe("captured");
+    expect((await waitForStatus(harness.baseUrl, first.id)).status).toBe("captured");
     const second = await createRequest(harness.baseUrl, { goal: "earbuds again", budget: 60 });
-    expect((await waitForStatus(harness.baseUrl, second)).status).toBe("captured");
+    expect((await waitForStatus(harness.baseUrl, second.id)).status).toBe("captured");
     const paypalFake = harness.deps.paypal as PaypalOrders & FakePaypalState;
     expect(paypalFake.creates.length).toBe(2);
     expect(paypalFake.creates[0]!.vaultId).toBeUndefined();
     expect(paypalFake.creates[1]!.vaultId).toBe("VAULT-TOKEN-001");
-    const detail = (await (await fetch(`${harness.baseUrl}/requests/${second}`)).json()) as {
+    const detail = (await (await fetch(`${harness.baseUrl}/requests/${second.id}`)).json()) as {
       audit: Array<{ step: string; llmRationale: string | null }>;
     };
     const paymentRow = detail.audit.find((row) => row.step === "payment" && row.llmRationale !== null);
@@ -251,9 +251,9 @@ describe("server: policy and audit surfaces", () => {
     const config = harness.db.getPolicy();
     harness.db.putPolicy({ ...config, weeklyCap: 40, perPurchaseCap: 100 });
     const first = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
-    expect((await waitForStatus(harness.baseUrl, first)).status).toBe("captured");
+    expect((await waitForStatus(harness.baseUrl, first.id)).status).toBe("captured");
     const second = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
-    const { status } = await waitForStatus(harness.baseUrl, second);
+    const { status } = await waitForStatus(harness.baseUrl, second.id);
     expect(status).toBe("needs_approval");
   });
 
@@ -261,24 +261,31 @@ describe("server: policy and audit surfaces", () => {
     const harness = await startServer();
     const initial = await (await fetch(`${harness.baseUrl}/policy`)).json();
     expect(initial).toMatchObject({ perPurchaseCap: 100, weeklyCap: 500 });
-    const bad = await fetch(`${harness.baseUrl}/policy`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ perPurchaseCap: -5 }),
-    });
-    expect(bad.status).toBe(400);
-    const put = await fetch(`${harness.baseUrl}/policy`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ perPurchaseCap: 42, weeklyCap: 100 }),
-    });
-    expect(put.status).toBe(200);
+    const previous = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = "test-admin-token";
+    try {
+      const bad = await fetch(`${harness.baseUrl}/policy`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-admin-token": "test-admin-token" },
+        body: JSON.stringify({ perPurchaseCap: -5 }),
+      });
+      expect(bad.status).toBe(400);
+      const put = await fetch(`${harness.baseUrl}/policy`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-admin-token": "test-admin-token" },
+        body: JSON.stringify({ perPurchaseCap: 42, weeklyCap: 100 }),
+      });
+      expect(put.status).toBe(200);
+    } finally {
+      if (previous === undefined) delete process.env.ADMIN_TOKEN;
+      else process.env.ADMIN_TOKEN = previous;
+    }
     expect(await (await fetch(`${harness.baseUrl}/policy`)).json()).toMatchObject({ perPurchaseCap: 42 });
   });
 
   it("GET /audit exposes the decision log for the AG Grid", async () => {
     const harness = await startServer();
-    const id = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
+    const { id } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
     await waitForStatus(harness.baseUrl, id);
     const data = (await (await fetch(`${harness.baseUrl}/audit`)).json()) as {
       rows: Array<{ step: string; verdict: string }>;
@@ -289,12 +296,89 @@ describe("server: policy and audit surfaces", () => {
 
   it("degrades to needs_approval with an UNAVAILABLE payment row when PayPal is not configured", async () => {
     const harness = await startServer({ paypal: null });
-    const id = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
+    const { id } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
     const { status } = await waitForStatus(harness.baseUrl, id);
     expect(status).toBe("needs_approval");
     const detail = (await (await fetch(`${harness.baseUrl}/requests/${id}`)).json()) as {
       audit: Array<{ step: string; paypalStatus: string | null }>;
     };
     expect(detail.audit.some((row) => row.step === "payment" && row.paypalStatus === "UNAVAILABLE")).toBe(true);
+  });
+});
+
+describe("server: mutating-endpoint auth", () => {
+  const ORIGINAL_ADMIN = process.env.ADMIN_TOKEN;
+
+  afterEach(() => {
+    if (ORIGINAL_ADMIN === undefined) delete process.env.ADMIN_TOKEN;
+    else process.env.ADMIN_TOKEN = ORIGINAL_ADMIN;
+  });
+
+  it("PUT /policy returns 403 when ADMIN_TOKEN is not configured", async () => {
+    delete process.env.ADMIN_TOKEN;
+    const harness = await startServer();
+    const response = await fetch(`${harness.baseUrl}/policy`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-admin-token": "anything" },
+      body: JSON.stringify({ perPurchaseCap: 42, weeklyCap: 100 }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it("PUT /policy returns 401 without or with a wrong token, 200 with the right one", async () => {
+    process.env.ADMIN_TOKEN = "test-admin-token";
+    const harness = await startServer();
+    const body = JSON.stringify({ perPurchaseCap: 42, weeklyCap: 100 });
+    const noToken = await fetch(`${harness.baseUrl}/policy`, { method: "PUT", headers: { "Content-Type": "application/json" }, body });
+    expect(noToken.status).toBe(401);
+    const wrongToken = await fetch(`${harness.baseUrl}/policy`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-admin-token": "wrong" },
+      body,
+    });
+    expect(wrongToken.status).toBe(401);
+    const rightToken = await fetch(`${harness.baseUrl}/policy`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-admin-token": "test-admin-token" },
+      body,
+    });
+    expect(rightToken.status).toBe(200);
+  });
+
+  it("approve/reject require the per-request secret: 401 without, 401 wrong, 200 right", async () => {
+    const harness = await startServer();
+    const config = harness.db.getPolicy();
+    harness.db.putPolicy({ ...config, perPurchaseCap: 20 });
+    const { id, token } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 100 });
+    await waitForStatus(harness.baseUrl, id);
+    const noToken = await fetch(`${harness.baseUrl}/requests/${id}/approve`, { method: "POST" });
+    expect(noToken.status).toBe(401);
+    const wrongToken = await fetch(`${harness.baseUrl}/requests/${id}/approve`, {
+      method: "POST",
+      headers: { "x-request-token": "guess" },
+    });
+    expect(wrongToken.status).toBe(401);
+    const rightToken = await fetch(`${harness.baseUrl}/requests/${id}/approve`, {
+      method: "POST",
+      headers: { "x-request-token": token },
+    });
+    expect(rightToken.status).toBe(200);
+    // Auth runs before state checks: without a token the endpoint must not
+    // even reveal whether the request exists or is capturable.
+    const rejectNoToken = await fetch(`${harness.baseUrl}/requests/${id}/reject`, { method: "POST" });
+    expect(rejectNoToken.status).toBe(401);
+  });
+
+  it("GET /requests/:id and GET /audit never expose the request token", async () => {
+    const harness = await startServer();
+    const config = harness.db.getPolicy();
+    harness.db.putPolicy({ ...config, perPurchaseCap: 20 });
+    const { id, token } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 100 });
+    await waitForStatus(harness.baseUrl, id);
+    const detailBody = await (await fetch(`${harness.baseUrl}/requests/${id}`)).text();
+    expect(detailBody).not.toContain(token);
+    expect(detailBody).not.toMatch(/requestToken|approval_secret/i);
+    const auditBody = await (await fetch(`${harness.baseUrl}/audit`)).text();
+    expect(auditBody).not.toContain(token);
   });
 });

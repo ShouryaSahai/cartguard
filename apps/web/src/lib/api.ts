@@ -85,24 +85,26 @@ export const api = {
       z.object({ ok: z.boolean(), paypal: z.string() }),
     );
   },
-  async createRequest(goal: string, budget: number): Promise<{ id: string }> {
+  async createRequest(goal: string, budget: number): Promise<{ id: string; requestToken: string }> {
     return request(
       "/requests",
-      z.object({ id: z.string() }),
+      z.object({ id: z.string(), requestToken: z.string() }),
       { method: "POST", body: JSON.stringify({ goal, budget }) },
     );
   },
   getRequest(id: string): Promise<RequestDetail> {
     return request(`/requests/${encodeURIComponent(id)}`, RequestDetailSchema);
   },
-  async approve(id: string): Promise<{ status: string }> {
+  async approve(id: string, requestToken: string): Promise<{ status: string }> {
     return request(`/requests/${encodeURIComponent(id)}/approve`, z.object({ status: z.string() }), {
       method: "POST",
+      headers: { "x-request-token": requestToken },
     });
   },
-  async reject(id: string): Promise<{ status: string }> {
+  async reject(id: string, requestToken: string): Promise<{ status: string }> {
     return request(`/requests/${encodeURIComponent(id)}/reject`, z.object({ status: z.string() }), {
       method: "POST",
+      headers: { "x-request-token": requestToken },
     });
   },
   async audit(limit = 500): Promise<{ rows: AuditRow[] }> {
@@ -111,8 +113,12 @@ export const api = {
   async getPolicy(): Promise<PolicyConfig> {
     return request("/policy", PolicySchema);
   },
-  async putPolicy(config: PolicyConfig): Promise<PolicyConfig> {
-    return request("/policy", PolicySchema, { method: "PUT", body: JSON.stringify(config) });
+  async putPolicy(config: PolicyConfig, adminToken: string): Promise<PolicyConfig> {
+    return request("/policy", PolicySchema, {
+      method: "PUT",
+      body: JSON.stringify(config),
+      headers: { "x-admin-token": adminToken },
+    });
   },
 };
 

@@ -6,6 +6,7 @@ import { openDb } from "../db.js";
 import type { Channel3Client } from "../channel3.js";
 import type { ChatCompleter, LlmMessage, LlmReply, LlmTool } from "../llm.js";
 import type { PaypalOrders } from "../paypal.js";
+import { createHash } from "node:crypto";
 import { DEFAULT_POLICY } from "@cartguard/shared";
 import type { AgentOutcome, NormalizedProduct, PolicyConfig } from "@cartguard/shared";
 
@@ -28,6 +29,8 @@ export interface RedTeamResult {
   passed: boolean;
   detail: string;
 }
+
+const REDTEAM_SECRET_HASH = createHash("sha256").update("redteam-local").digest("hex");
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -115,7 +118,7 @@ async function runPipeline(
   budget = 60,
 ): Promise<{ status: string }> {
   const db = openDb(":memory:");
-  db.createRequest("r1", "goal", budget);
+  db.createRequest("r1", "goal", budget, REDTEAM_SECRET_HASH);
   await processRequest("r1", "goal", budget, {
     db,
     llm,
@@ -719,11 +722,11 @@ export const ATTACKS: RedTeamAttack[] = [
         publicBaseUrl: "http://localhost:3000",
         brandName: "CartGuard",
       };
-      db.createRequest("w1", "goal", 60);
+      db.createRequest("w1", "goal", 60, REDTEAM_SECRET_HASH);
       await processRequest("w1", "goal", 60, deps);
       const first = db.getRequest("w1")?.status;
       assert(first === "captured", `first purchase: ${first}`);
-      db.createRequest("w2", "goal", 60);
+      db.createRequest("w2", "goal", 60, REDTEAM_SECRET_HASH);
       await processRequest("w2", "goal", 60, { ...deps, llm: scriptedLlm([PROPOSE_OK("h1")]) });
       const second = db.getRequest("w2")?.status;
       assert(second === "needs_approval", `second purchase: ${second} (30 captured + 30 > 50 cap)`);

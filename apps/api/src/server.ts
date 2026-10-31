@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -37,6 +37,22 @@ const TERMINAL_STATUSES: RequestStatus[] = [
   "failed",
 ];
 
+function hashRequestToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/** Per-request approval secret: only the hash is stored; the plaintext is
+ * returned exactly once by POST /requests and required by approve/reject. */
+function authorizeRequestMutation(
+  db: CartGuardDb,
+  requestId: string,
+  providedToken: string | undefined,
+): boolean {
+  const stored = db.getRequestApprovalSecretHash(requestId);
+  if (stored === null || providedToken === undefined || providedToken === "") return false;
+  return hashRequestToken(providedToken) === stored;
+}
+
 export function createApp(deps: ServerDeps): Express {
   const app = express();
   app.use(express.json());
@@ -56,9 +72,10 @@ export function createApp(deps: ServerDeps): Express {
       return;
     }
     const id = randomUUID();
-    deps.db.createRequest(id, parsed.data.goal, parsed.data.budget);
+    const requestToken = randomBytes(24).toString("hex");
+    deps.db.createRequest(id, parsed.data.goal, parsed.data.budget, hashRequestToken(requestToken));
     startRequestProcessing(id, parsed.data.goal, parsed.data.budget, deps);
-    res.status(201).json({ id });
+    res.status(201).json({ id, requestToken });
   });
 
   app.get("/requests/:id", (req, res) => {
@@ -78,6 +95,10 @@ export function createApp(deps: ServerDeps): Express {
     const row = deps.db.getRequest(req.params.id ?? "");
     if (row === null) {
       res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!authorizeRequestMutation(deps.db, row.id, req.header("x-request-token"))) {
+      res.status(401).json({ error: "unauthorized", hint: "missing or invalid x-request-token" });
       return;
     }
     if (row.status !== "needs_approval" || deps.paypal === null || row.paypalOrderId === null) {
@@ -113,6 +134,10 @@ export function createApp(deps: ServerDeps): Express {
     const row = deps.db.getRequest(req.params.id ?? "");
     if (row === null) {
       res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!authorizeRequestMutation(deps.db, row.id, req.header("x-request-token"))) {
+      res.status(401).json({ error: "unauthorized", hint: "missing or invalid x-request-token" });
       return;
     }
     if (row.status !== "needs_approval") {
@@ -184,6 +209,15 @@ export function createApp(deps: ServerDeps): Express {
   });
 
   app.put("/policy", (req, res) => {
+    const adminToken = process.env.ADMIN_TOKEN ?? "";
+    if (adminToken === "") {
+      res.status(403).json({ error: "admin_token_not_configured", hint: "set ADMIN_TOKEN to allow policy writes" });
+      return;
+    }
+    if (req.header("x-admin-token") !== adminToken) {
+      res.status(401).json({ error: "unauthorized", hint: "missing or invalid x-admin-token" });
+      return;
+    }
     const parsed = PolicyConfigSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "invalid_policy", detail: z.treeifyError(parsed.error) });

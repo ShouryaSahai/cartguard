@@ -33,6 +33,15 @@ export function PolicyEditor() {
 
   async function save() {
     if (config === null) return;
+    let adminToken = sessionStorage.getItem("cartguard-admin-token") ?? "";
+    if (adminToken === "") {
+      const entered = window.prompt("Enter the admin token (ADMIN_TOKEN) to save the policy:");
+      if (entered === null || entered.trim() === "") {
+        setError("Saving the policy requires an admin token.");
+        return;
+      }
+      adminToken = entered.trim();
+    }
     setBusy(true);
     setSaved(false);
     try {
@@ -41,12 +50,19 @@ export function PolicyEditor() {
         allowlistMerchants: csv(merchants),
         blocklistCategories: csv(categories),
       };
-      const stored = await api.putPolicy(next);
+      const stored = await api.putPolicy(next, adminToken);
+      sessionStorage.setItem("cartguard-admin-token", adminToken);
       setConfig(stored);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "Failed to save policy");
+      const message = cause instanceof Error ? cause.message : "Failed to save policy";
+      if (message.includes("401") || message.includes("403")) {
+        sessionStorage.removeItem("cartguard-admin-token");
+        setError("Admin token missing or invalid — nothing was saved.");
+      } else {
+        setError(message);
+      }
     } finally {
       setBusy(false);
     }

@@ -18,7 +18,7 @@ export function App() {
     return stored === "light" ? "light" : "dark";
   });
   const [health, setHealth] = useState<{ ok: boolean; paypal: string } | null>(null);
-  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+  const [activeRequest, setActiveRequest] = useState<{ id: string; token: string } | null>(null);
   const [auditKey, setAuditKey] = useState(0);
   const [tab, setTab] = useState<Tab>("audit");
 
@@ -51,9 +51,13 @@ export function App() {
       <main className="mx-auto w-full max-w-7xl space-y-4 px-4 py-6">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-4">
-            <NewRequestCard onCreated={(id) => setActiveRequestId(id)} />
-            {activeRequestId !== null && (
-              <RequestView requestId={activeRequestId} onSettled={onSettled} />
+            <NewRequestCard onCreated={(id, token) => setActiveRequest({ id, token })} />
+            {activeRequest !== null && (
+              <RequestView
+                requestId={activeRequest.id}
+                requestToken={activeRequest.token}
+                onSettled={onSettled}
+              />
             )}
           </div>
           <div className="space-y-4">

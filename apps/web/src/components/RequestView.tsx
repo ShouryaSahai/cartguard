@@ -24,7 +24,15 @@ const KIND_META: Record<string, { icon: string; tone: string }> = {
   error: { icon: "✗", tone: "text-danger" },
 };
 
-export function RequestView({ requestId, onSettled }: { requestId: string; onSettled: () => void }) {
+export function RequestView({
+  requestId,
+  requestToken,
+  onSettled,
+}: {
+  requestId: string;
+  requestToken: string;
+  onSettled: () => void;
+}) {
   const [detail, setDetail] = useState<RequestDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,8 +73,8 @@ export function RequestView({ requestId, onSettled }: { requestId: string; onSet
   async function decide(action: "approve" | "reject") {
     setBusy(true);
     try {
-      if (action === "approve") await api.approve(requestId);
-      else await api.reject(requestId);
+      if (action === "approve") await api.approve(requestId, requestToken);
+      else await api.reject(requestId, requestToken);
       setDetail(await api.getRequest(requestId));
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "Decision failed");
