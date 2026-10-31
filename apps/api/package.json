@@ -12,7 +12,8 @@
     "start": "tsx src/server.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "preflight": "tsx scripts/preflight.ts",
-    "spike:paypal": "tsx scripts/spike-paypal.ts"
+    "spike:paypal": "tsx scripts/spike-paypal.ts",
+    "export:audit": "tsx scripts/export-audit.ts"
   },
   "dependencies": {
     "@cartguard/shared": "*",
