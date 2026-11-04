@@ -1,0 +1,11 @@
+{
+  "name": "@cartguard/gate-client",
+  "version": "1.0.0",
+  "description": "Agent-side client for the CartGuard gate API — propose a purchase, get the verdict.",
+  "type": "module",
+  "main": "./index.mjs",
+  "types": "./index.d.ts",
+  "exports": { ".": { "types": "./index.d.ts", "default": "./index.mjs" } },
+  "scripts": { "test": "vitest run" },
+  "devDependencies": { "typescript": "^5.9.2", "vitest": "^5.0.5" }
+}
