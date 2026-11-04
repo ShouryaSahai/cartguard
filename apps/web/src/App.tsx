@@ -45,12 +45,18 @@ export function App() {
 
   return (
     <div className="min-h-full">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-lg focus:bg-accent focus:px-3 focus:py-2 focus:text-sm focus:text-accent-fg"
+      >
+        Skip to content
+      </a>
       <Header
         health={health}
         theme={theme}
         onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
       />
-      <main className="mx-auto w-full max-w-7xl space-y-4 px-4 py-6">
+      <main id="main-content" className="mx-auto w-full max-w-7xl space-y-4 px-4 py-6">
         <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
           <div className="space-y-4 lg:sticky lg:top-20">
             <NewRequestCard onCreated={(id, token) => setActiveRequest({ id, token })} />

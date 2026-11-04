@@ -15,6 +15,7 @@ import { createLlmCompleter, type ChatCompleter } from "./llm.js";
 import { createMockChannel3, createMockLlm, createMockPaypal } from "./mockRails.js";
 import { seedDemoData } from "./demoSeedData.js";
 import { createPaypalOrdersFromEnv, type PaypalOrders } from "./paypal.js";
+import { auditToCsv } from "./auditCsv.js";
 import { subscribe } from "./events.js";
 import { evaluatePolicy } from "./policy.js";
 import { executeProposal, rememberVaultToken, startRequestProcessing } from "./requests.js";
@@ -478,6 +479,12 @@ export function createApp(deps: ServerDeps): Express {
       unsubscribe();
       res.end();
     });
+  });
+
+  app.get("/audit.csv", (req, res) => {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="cartguard-audit.csv"');
+    res.send(auditToCsv(deps.db.listAudit(1_000_000)));
   });
 
   app.get("/audit", (req, res) => {

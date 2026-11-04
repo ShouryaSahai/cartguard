@@ -312,6 +312,16 @@ paths:
           description: Unknown request
         "502":
           description: Capture failed
+  /audit.csv:
+    get:
+      tags: [audit]
+      summary: Download the audit table as CSV
+      responses:
+        "200":
+          description: CSV export of the audit rows
+          content:
+            text/csv:
+              schema: { type: string }
   /audit:
     get:
       tags: [audit]

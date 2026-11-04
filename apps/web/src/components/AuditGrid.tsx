@@ -75,7 +75,14 @@ export function AuditGrid({ refreshKey }: { refreshKey: number }) {
         sortIndex: 0,
       },
       { field: "step", headerName: "Step", width: 90 },
-      { field: "productId", headerName: "Product", flex: 1, minWidth: 90, tooltipField: "productId" },
+      {
+        field: "productId",
+        headerName: "Product",
+        flex: 1,
+        minWidth: 90,
+        tooltipField: "llmRationale",
+        headerTooltip: "Rationale is shown as the tooltip when present",
+      },
       { field: "merchant", headerName: "Merchant", width: 120 },
       {
         field: "priceUsd",
@@ -149,6 +156,14 @@ export function AuditGrid({ refreshKey }: { refreshKey: number }) {
             value={quickFilter}
             onChange={(event) => setQuickFilter(event.target.value)}
           />
+          <a
+            href="/audit.csv"
+            download="cartguard-audit.csv"
+            className="inline-flex items-center rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-fg/5"
+            title="Download the audit table as CSV"
+          >
+            ⬇ CSV
+          </a>
           <Button variant="outline" onClick={() => void load()}>
             ↻
           </Button>

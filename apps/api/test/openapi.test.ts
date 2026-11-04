@@ -21,6 +21,7 @@ const APP_ROUTES: Array<{ method: string; path: string }> = [
   { method: "get", path: "/mandates" },
   { method: "post", path: "/mandates/:id/revoke" },
   { method: "get", path: "/audit" },
+  { method: "get", path: "/audit.csv" },
   { method: "get", path: "/policy" },
   { method: "put", path: "/policy" },
   { method: "post", path: "/policy/replay" },

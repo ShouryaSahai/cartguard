@@ -70,6 +70,19 @@ export function ChartsPanel({ refreshKey }: { refreshKey: number }) {
       ...chartTheme,
       data: spendData,
       legend: { enabled: false },
+      axes: [
+        {
+          type: "category" as const,
+          position: "bottom" as const,
+          label: { color: "#a8b3c7" },
+        },
+        {
+          type: "number" as const,
+          position: "left" as const,
+          title: { text: "USD", color: "#a8b3c7" },
+          label: { color: "#a8b3c7" },
+        },
+      ] as unknown as AgCartesianChartOptions["axes"],
       series: [
         {
           type: "line" as const,
@@ -117,7 +130,7 @@ export function ChartsPanel({ refreshKey }: { refreshKey: number }) {
               No captured payments yet — run a request that passes the gate.
             </p>
           ) : (
-            <div className="h-72">
+            <div className="h-72" role="img" aria-label="Line chart of captured spend per day">
               <AgCharts options={spendOptions} />
             </div>
           )}
@@ -133,7 +146,7 @@ export function ChartsPanel({ refreshKey }: { refreshKey: number }) {
               No gate decisions yet — the breakdown appears with your first request.
             </p>
           ) : (
-            <div className="h-72">
+            <div className="h-72" role="img" aria-label="Donut chart of gate verdict counts">
               <AgCharts options={verdictOptions} />
             </div>
           )}
