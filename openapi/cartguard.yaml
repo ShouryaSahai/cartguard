@@ -15,6 +15,10 @@ servers:
 tags:
   - name: requests
     description: Shopping requests and their lifecycle
+  - name: mandates
+    description: Spending mandates
+  - name: gate
+    description: Gate-as-infrastructure for external agents
   - name: audit
     description: Decision audit log (AG Grid feed)
   - name: policy
@@ -124,6 +128,170 @@ paths:
           description: Rejected
         "409":
           description: Request is not in needs_approval state
+  /requests/{id}/events:
+    get:
+      tags: [requests]
+      summary: Live run streaming (SSE) — reasoning steps and status changes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: text/event-stream of run events (hello, status, step, done)
+        "404":
+          description: Unknown request
+  /gate/propose:
+    post:
+      tags: [gate]
+      summary: Gate-as-infrastructure — submit an external agent's proposal
+      description: >-
+        Authenticated with the GATE_API_KEY (x-api-key header). Goes through the
+        same gate and payment pipeline as internal requests; returns the verdict,
+        reasons, and (for needs_approval) the buyer approval link.
+      parameters:
+        - name: x-api-key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [goal, budget, proposal]
+              properties:
+                goal: { type: string, maxLength: 500 }
+                budget: { type: number, exclusiveMinimum: 0 }
+                search_median_price: { type: number, nullable: true }
+                mandate_id: { type: string, format: uuid, nullable: true }
+                proposal:
+                  type: object
+                  required: [product_id, rationale, goal_match_score]
+                  properties:
+                    product_id: { type: string }
+                    stated_price: { type: number, nullable: true, description: "informational only — never used for payment" }
+                    rationale: { type: string }
+                    goal_match_score: { type: number, minimum: 0, maximum: 1 }
+      responses:
+        "200":
+          description: Gate decision
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId: { type: string, format: uuid }
+                  status: { type: string }
+                  verdict: { type: string, enum: [auto_pay, needs_approval, blocked, failed] }
+                  reasons:
+                    type: array
+                    items: { $ref: "#/components/schemas/PolicyReason" }
+                  priceUsed: { type: number }
+                  approvalLink: { type: string, nullable: true }
+                  paypalOrderId: { type: string, nullable: true }
+        "401": { description: Missing or invalid API key }
+        "403": { description: Gate API not configured }
+        "400": { description: Invalid body or unknown mandate }
+  /mandates:
+    post:
+      tags: [mandates]
+      summary: Create a spending mandate (admin-token protected)
+      parameters:
+        - name: x-admin-token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [budgetUsd]
+              properties:
+                budgetUsd: { type: number, exclusiveMinimum: 0 }
+                expiresAt: { type: string, format: date-time, nullable: true }
+                allowedMerchants: { type: array, items: { type: string } }
+                blocklistCategories: { type: array, items: { type: string } }
+                maxItems: { type: integer, nullable: true }
+      responses:
+        "201":
+          description: Mandate created
+        "401": { description: Unauthorized }
+        "403": { description: ADMIN_TOKEN not configured }
+    get:
+      tags: [mandates]
+      summary: List spending mandates
+      responses:
+        "200":
+          description: Mandates, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mandates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Mandate"
+  /mandates/{id}/revoke:
+    post:
+      tags: [mandates]
+      summary: Revoke a mandate in one click (admin-token protected)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: x-admin-token
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Revoked }
+        "404": { description: Unknown mandate }
+  /policy/replay:
+    post:
+      tags: [policy]
+      summary: Replay past gate decisions against a DRAFT policy (read-only)
+      description: >-
+        Only rules computable from stored data replay (budget, caps, currency,
+        availability, category, allowlist); weekly-spend, median, and
+        match-score rules are marked skipped.
+      parameters:
+        - name: x-admin-token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyConfig"
+      responses:
+        "200":
+          description: Replay results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  replays:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        requestId: { type: string, format: uuid }
+                        oldVerdict: { type: string }
+                        newVerdict: { type: string }
+                        changed: { type: boolean }
+                        skipped: { type: string }
+        "401": { description: Unauthorized }
+        "403": { description: ADMIN_TOKEN not configured }
   /paypal/return:
     get:
       tags: [paypal]
@@ -202,6 +370,17 @@ components:
         priceMultiplierHigh: { type: number, example: 1.5 }
         priceMultiplierLow: { type: number, example: 0.4 }
         goalMatchThreshold: { type: number, example: 0.6 }
+    Mandate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        budgetUsd: { type: number }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        allowedMerchants: { type: array, items: { type: string } }
+        blocklistCategories: { type: array, items: { type: string } }
+        maxItems: { type: integer, nullable: true }
+        revoked: { type: boolean }
+        createdAt: { type: string, format: date-time }
     PolicyReason:
       type: object
       properties:
