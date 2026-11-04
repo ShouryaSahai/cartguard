@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": { "cartguard-mcp": "./src/index.mjs" },
-  "scripts": { "start": "node src/index.mjs" }
+  "bin": {
+    "cartguard-mcp": "./src/index.mjs"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.5"
+  }
 }

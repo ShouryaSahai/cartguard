@@ -33,10 +33,12 @@ const TOOL = {
 };
 
 function jsonRpc(id, result) {
-  return JSON.stringify({ jsonrpc: "2.0", id, result });
+  // stdio transport: every message must end with a newline or the client's
+  // line-based reader never completes the frame.
+  return `${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`;
 }
 function jsonRpcError(id, code, message) {
-  return JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } });
+  return `${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n`;
 }
 
 async function callGate(args) {
