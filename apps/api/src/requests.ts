@@ -4,7 +4,9 @@ import type { CartGuardDb, RequestStatus } from "./db.js";
 import type { Channel3Client } from "./channel3.js";
 import type { ChatCompleter } from "./llm.js";
 import type { PaypalOrders } from "./paypal.js";
-import type { MandateRuntime, PolicyReason, PurchaseProposal, Verdict } from "@cartguard/shared";
+import type { AgentStep, MandateRuntime, PolicyReason, PurchaseProposal, Verdict } from "@cartguard/shared";
+import { publish } from "./events.js";
+import type { RunEvent } from "./events.js";
 
 export interface PipelineDeps {
   db: CartGuardDb;
@@ -107,8 +109,18 @@ export async function processRequest(
 ): Promise<void> {
   deps.db.setRequestStatus(requestId, "running");
   const mandateId = deps.db.getRequest(requestId)?.mandateId ?? null;
+  publish(requestId, { type: "status", data: { status: "running" } });
 
-  const outcome = await runAgent(goal, budget, { llm: deps.llm, channel3: deps.channel3 });
+  const trace: AgentStep[] = [];
+  const outcome = await runAgent(goal, budget, {
+    llm: deps.llm,
+    channel3: deps.channel3,
+    onStep: (step) => {
+      trace.push(step);
+      deps.db.setRequestTrace(requestId, trace);
+      publish(requestId, { type: "step", data: step });
+    },
+  });
   deps.db.setRequestTrace(requestId, outcome.trace);
 
   if (outcome.status !== "proposed" || outcome.proposal === null) {
@@ -129,8 +141,11 @@ export async function processRequest(
     return;
   }
 
-  await executeProposal(deps, requestId, goal, budget, outcome.proposal, outcome.searchMedianPrice, mandateId);
+  const result = await executeProposal(deps, requestId, goal, budget, outcome.proposal, outcome.searchMedianPrice, mandateId);
+  publish(requestId, { type: "done", data: { status: result.status, verdict: result.verdict } });
 }
+
+export type { RunEvent };
 
 /** The gate + payment execution shared by the internal agent pipeline and the
  * external gate API (POST /gate/propose). ONE code path to PayPal. */

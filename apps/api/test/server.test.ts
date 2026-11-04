@@ -612,3 +612,54 @@ describe("server: policy replay", () => {
     }
   });
 });
+
+describe("server: live run streaming (SSE)", () => {
+  it("streams reasoning steps as they happen, then a done event", { timeout: 20_000 }, async () => {
+    // Slow the fake LLM so the SSE reader attaches while the run is live.
+    const base = fakeLlm();
+    const slowLlm: ChatCompleter = async (request) => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return base(request);
+    };
+    const harness = await startServer({ llm: slowLlm });
+    const { id } = await createRequest(harness.baseUrl, { goal: "earbuds", budget: 60 });
+    const stream = await fetch(`${harness.baseUrl}/requests/${id}/events`);
+    expect(stream.headers.get("content-type")).toContain("text/event-stream");
+
+    const reader = stream.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const events: Array<{ type: string; data: unknown }> = [];
+
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      let index: number;
+      while ((index = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, index);
+        buffer = buffer.slice(index + 2);
+        const line = raw.split("\n").find((l) => l.startsWith("data: "));
+        if (line === undefined) continue;
+        events.push(JSON.parse(line.slice(6)) as { type: string; data: unknown });
+      }
+      if (events.some((event) => event.type === "done")) break;
+    }
+    const types = events.map((event) => event.type);
+    expect(types).toContain("hello");
+    expect(types).toContain("status");
+    expect(types).toContain("step");
+    expect(types).toContain("done");
+    const steps = events.filter((event) => event.type === "step") as Array<{ data: { text: string } }>;
+    expect(steps.length).toBeGreaterThanOrEqual(2);
+    await stream.body!.cancel().catch(() => undefined);
+  });
+
+  it("stays open for a request id with no run yet (subscribe-anytime)", async () => {
+    const harness = await startServer();
+    const response = await fetch(`${harness.baseUrl}/requests/00000000-0000-4000-8000-000000000000/events`);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    await response.body!.cancel().catch(() => undefined);
+  });
+});

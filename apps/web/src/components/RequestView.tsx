@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { RequestDetail } from "../lib/api";
 import { api } from "../lib/api";
@@ -97,28 +97,35 @@ export function RequestView({
   const settledRef = useRef(false);
   const streamRef = useRef<HTMLDivElement | null>(null);
 
+  const pollNow = useCallback(async (): Promise<boolean> => {
+    try {
+      const data = await api.getRequest(requestId);
+      setDetail(data);
+      setError(null);
+      if (TERMINAL.includes(data.request.status)) {
+        if (!settledRef.current) {
+          settledRef.current = true;
+          onSettled();
+        }
+        return true;
+      }
+      return false;
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Failed to load request");
+      return false;
+    }
+  }, [requestId, onSettled]);
+
+  // Polling reconciler: server truth, at a relaxed cadence.
   useEffect(() => {
     settledRef.current = false;
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function poll() {
-      try {
-        const data = await api.getRequest(requestId);
-        if (!alive) return;
-        setDetail(data);
-        setError(null);
-        if (TERMINAL.includes(data.request.status)) {
-          if (!settledRef.current) {
-            settledRef.current = true;
-            onSettled();
-          }
-          return;
-        }
-      } catch (cause: unknown) {
-        if (!alive) return;
-        setError(cause instanceof Error ? cause.message : "Failed to load request");
-      }
+      if (!alive) return;
+      const terminal = await pollNow();
+      if (!alive || terminal) return;
       timer = setTimeout(() => void poll(), 700);
     }
 
@@ -127,7 +134,25 @@ export function RequestView({
       alive = false;
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [requestId, onSettled]);
+  }, [requestId, pollNow]);
+
+  // Live stream: the server pushes reasoning steps over SSE; each event
+  // triggers an immediate reconciling poll so the UI reflects server truth
+  // within milliseconds instead of waiting for the next poll tick.
+  useEffect(() => {
+    const source = new EventSource(`/requests/${encodeURIComponent(requestId)}/events`);
+    source.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data) as { type: string };
+        if (parsed.type === "step" || parsed.type === "done" || parsed.type === "status") {
+          void pollNow();
+        }
+      } catch {
+        // Ignore malformed frames; the reconciler self-corrects.
+      }
+    };
+    return () => source.close();
+  }, [requestId, pollNow]);
 
   useEffect(() => {
     if (streamRef.current !== null) {

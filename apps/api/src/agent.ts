@@ -18,6 +18,8 @@ export interface AgentDeps {
   llm: ChatCompleter;
   channel3: Channel3Client;
   maxSteps?: number;
+  /** Live callback fired the moment a trace entry is recorded (SSE). */
+  onStep?: (step: AgentStep) => void;
 }
 
 const DEFAULT_MAX_STEPS = 8;
@@ -159,7 +161,13 @@ export async function runAgent(goal: string, budget: number, deps: AgentDeps): P
   let searchMedianPrice: number | null = null;
 
   const push = (step: number, kind: AgentStep["kind"], text: string): void => {
-    trace.push({ step, kind, text });
+    const entry: AgentStep = { step, kind, text };
+    trace.push(entry);
+    try {
+      deps.onStep?.(entry);
+    } catch {
+      // Live streaming must never break the run.
+    }
   };
 
   const finish = (status: AgentStatus, proposal: PurchaseProposal | null): AgentOutcome => {

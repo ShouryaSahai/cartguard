@@ -15,6 +15,7 @@ import { createLlmCompleter, type ChatCompleter } from "./llm.js";
 import { createMockChannel3, createMockLlm, createMockPaypal } from "./mockRails.js";
 import { seedDemoData } from "./demoSeedData.js";
 import { createPaypalOrdersFromEnv, type PaypalOrders } from "./paypal.js";
+import { subscribe } from "./events.js";
 import { evaluatePolicy } from "./policy.js";
 import { executeProposal, rememberVaultToken, startRequestProcessing } from "./requests.js";
 
@@ -454,6 +455,29 @@ export function createApp(deps: ServerDeps): Express {
     }
     deps.db.revokeMandate(req.params.id ?? "");
     res.json({ id: req.params.id, revoked: true });
+  });
+
+  // Live run streaming (SSE): reasoning steps and status changes as they
+  // happen. Trace data only — no secrets on this channel.
+  app.get("/requests/:id/events", (req, res) => {
+    // Subscribing before the request exists is allowed: the uuid is the
+    // capability, and clients can attach before POSTing the run.
+    const requestId = req.params.id ?? "";
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+    const send = (event: { type: string; data: unknown }): void => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+    send({ type: "hello", data: { requestId } });
+    const unsubscribe = subscribe(requestId, send);
+    const heartbeat = setInterval(() => res.write(": hb\n\n"), 15_000);
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+      res.end();
+    });
   });
 
   app.get("/audit", (req, res) => {
