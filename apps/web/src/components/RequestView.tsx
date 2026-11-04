@@ -16,13 +16,69 @@ const STATUS_META: Record<string, { label: string; tone: Tone }> = {
   failed: { label: "failed", tone: "danger" },
 };
 
-const KIND_META: Record<string, { icon: string; tone: string }> = {
-  assistant_text: { icon: "💬", tone: "text-fg" },
-  tool_call: { icon: "⚙️", tone: "text-accent" },
-  tool_result: { icon: "↳", tone: "text-muted" },
-  proposal: { icon: "⚡", tone: "text-warn" },
-  error: { icon: "✗", tone: "text-danger" },
-};
+interface StoryBeat {
+  icon: string;
+  title: string;
+  detail?: string;
+}
+
+/** Turns a raw trace entry into a human sentence. Falls back to the raw text
+ * when the payload is not one of our known shapes. */
+function toStoryBeat(entry: { kind: string; text: string }): StoryBeat {
+  const parsed: Record<string, unknown> | null = (() => {
+    try {
+      const trimmed =
+        entry.text.startsWith("{") || entry.text.startsWith("[")
+          ? entry.text
+          : entry.text.slice(entry.text.indexOf(" ") + 1);
+      return JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  })();
+
+  if (entry.kind === "tool_call" && entry.text.startsWith("search_products")) {
+    const query = parsed !== null && typeof parsed.query === "string" ? parsed.query : "";
+    return { icon: "🔍", title: `Searching product data${query !== "" ? `: “${query}”` : ""}` };
+  }
+  if (entry.kind === "tool_call" && entry.text.startsWith("get_product")) {
+    const id = parsed !== null && typeof parsed.product_id === "string" ? parsed.product_id : "";
+    return { icon: "🔎", title: `Verifying candidate ${id} with the product API` };
+  }
+  if (entry.kind === "tool_call" && entry.text.startsWith("propose_purchase")) {
+    return { icon: "📝", title: "Submitting the pick for gate review" };
+  }
+  if (entry.kind === "tool_result" && parsed !== null && Array.isArray(parsed.products)) {
+    const count = parsed.products.length;
+    const median =
+      typeof parsed.median_price_usd === "number" ? `$${parsed.median_price_usd.toFixed(2)}` : "n/a";
+    return { icon: "🧾", title: `Found ${count} product${count === 1 ? "" : "s"} · median price ${median}`, detail: entry.text };
+  }
+  if (entry.kind === "tool_result" && parsed !== null && typeof parsed.title === "string") {
+    const offer = parsed.price_usd;
+    const merchant = typeof parsed.merchant === "string" ? parsed.merchant : "";
+    const stock = parsed.availability === "InStock" ? "in stock" : "availability unknown";
+    return {
+      icon: "✅",
+      title: `Verified: ${parsed.title} — ${typeof offer === "number" ? `$${offer.toFixed(2)}` : "price n/a"} at ${merchant} (${stock})`,
+      detail: entry.text,
+    };
+  }
+  if (entry.kind === "proposal") {
+    return { icon: "⚡", title: entry.text };
+  }
+  if (entry.kind === "error") {
+    return { icon: "⚠️", title: entry.text };
+  }
+  if (entry.kind === "assistant_text" && entry.text.trim() !== "") {
+    return { icon: "💬", title: entry.text };
+  }
+  if (entry.kind === "tool_result" && entry.text.includes("Unknown tool")) {
+    const tool = entry.text.replace("Unknown tool: ", "").trim();
+    return { icon: "🛡️", title: `Blocked an unknown tool call (“${tool}”) — no such capability exists` };
+  }
+  return { icon: "·", title: entry.text };
+}
 
 export function RequestView({
   requestId,
@@ -37,6 +93,7 @@ export function RequestView({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const settledRef = useRef(false);
+  const streamRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     settledRef.current = false;
@@ -69,6 +126,12 @@ export function RequestView({
       if (timer !== undefined) clearTimeout(timer);
     };
   }, [requestId, onSettled]);
+
+  useEffect(() => {
+    if (streamRef.current !== null) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight;
+    }
+  }, [detail?.request.trace.length]);
 
   async function decide(action: "approve" | "reject") {
     setBusy(true);
@@ -128,22 +191,36 @@ export function RequestView({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
             Agent reasoning
           </p>
-          <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-xl border border-border bg-bg p-3 font-mono text-xs">
+          <div
+            ref={streamRef}
+            aria-live="polite"
+            className="max-h-72 space-y-1.5 overflow-y-auto rounded-xl border border-border bg-bg p-3 text-xs"
+          >
             {request.trace.length === 0 && (
               <p className="text-muted">Waiting for the first model turn…</p>
             )}
             <AnimatePresence initial={false}>
-              {request.trace.map((entry) => {
-                const meta = KIND_META[entry.kind] ?? { icon: "·", tone: "text-fg" };
+              {request.trace.map((entry, index) => {
+                const beat = toStoryBeat(entry);
                 return (
                   <motion.div
-                    key={`${entry.step}-${entry.kind}-${entry.text.slice(0, 24)}`}
+                    key={`${entry.step}-${entry.kind}-${index}`}
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex gap-2"
                   >
-                    <span aria-hidden>{meta.icon}</span>
-                    <span className={`${meta.tone} break-all`}>{entry.text.slice(0, 300)}</span>
+                    <span aria-hidden>{beat.icon}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-fg">{beat.title}</p>
+                      {beat.detail !== undefined && (
+                        <details className="mt-0.5">
+                          <summary className="cursor-pointer select-none text-muted">raw data</summary>
+                          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] text-muted">
+                            {beat.detail}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
                   </motion.div>
                 );
               })}
