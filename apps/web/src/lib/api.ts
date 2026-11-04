@@ -17,6 +17,7 @@ export const AuditRowSchema = z.object({
   llmRationale: z.string().nullable(),
   paypalOrderId: z.string().nullable(),
   paypalStatus: z.string().nullable(),
+  demo: z.boolean().default(false),
   ts: z.string(),
 });
 export type AuditRow = z.infer<typeof AuditRowSchema>;
@@ -93,10 +94,10 @@ export const MandateSchema = z.object({
 export type Mandate = z.infer<typeof MandateSchema>;
 
 export const api = {
-  async health(): Promise<{ ok: boolean; paypal: string }> {
+  async health(): Promise<{ ok: boolean; mode: "mock" | "live"; paypal: string }> {
     return request(
       "/health",
-      z.object({ ok: z.boolean(), paypal: z.string() }),
+      z.object({ ok: z.boolean(), mode: z.enum(["mock", "live"]), paypal: z.string() }),
     );
   },
   async createRequest(goal: string, budget: number): Promise<{ id: string; requestToken: string }> {

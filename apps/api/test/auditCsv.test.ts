@@ -16,6 +16,8 @@ function row(overrides: Partial<AuditRow> = {}): AuditRow {
     llmRationale: null,
     paypalOrderId: null,
     paypalStatus: null,
+    mandateId: null,
+    demo: false,
     ts: "2026-10-31T00:00:00.000Z",
     ...overrides,
   };

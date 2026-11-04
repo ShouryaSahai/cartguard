@@ -110,6 +110,7 @@ export function seedDemoData(db: CartGuardDb): void {
       verdict: demo.verdict,
       reasons: demo.reasons,
       llmRationale: "Seeded demo row — not a live run.",
+      demo: true,
       paypalOrderId: null,
       paypalStatus: null,
     });

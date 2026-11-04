@@ -54,10 +54,12 @@ export interface AuditEntry {
   llmRationale: string | null;
   paypalOrderId: string | null;
   paypalStatus: string | null;
+  demo?: boolean;
 }
 
 export interface AuditRow extends AuditEntry {
   id: number;
+  demo: boolean;
   ts: string;
 }
 
@@ -92,6 +94,8 @@ export interface CartGuardDb {
   spentUnderMandate(mandateId: string): number;
   /** Sum of CAPTURED audit-row prices in the last 7 days (PRD weekly spend). */
   weeklyCapturedSpend(now: Date): number;
+  /** Marks queued/running requests as failed (boot-time recovery). */
+  failStaleRuns(): number;
   close(): void;
 }
 
@@ -121,6 +125,8 @@ function table(db: DatabaseSync): void {
       llm_rationale TEXT,
       paypal_order_id TEXT,
       paypal_status TEXT,
+      mandate_id TEXT,
+      demo INTEGER NOT NULL DEFAULT 0,
       ts TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS policy (
@@ -159,6 +165,11 @@ export function openDb(path: string): CartGuardDb {
   }
   try {
     db.exec("ALTER TABLE audit ADD COLUMN mandate_id TEXT");
+  } catch {
+    // Column already exists.
+  }
+  try {
+    db.exec("ALTER TABLE audit ADD COLUMN demo INTEGER NOT NULL DEFAULT 0");
   } catch {
     // Column already exists.
   }
@@ -244,8 +255,8 @@ export function openDb(path: string): CartGuardDb {
 
     appendAudit(entry: AuditEntry): void {
       db.prepare(
-        `INSERT INTO audit (request_id, step, product_id, merchant, price_usd, verdict, reasons_json, llm_rationale, paypal_order_id, paypal_status, mandate_id, ts)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO audit (request_id, step, product_id, merchant, price_usd, verdict, reasons_json, llm_rationale, paypal_order_id, paypal_status, mandate_id, demo, ts)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         entry.requestId,
         entry.step,
@@ -258,6 +269,7 @@ export function openDb(path: string): CartGuardDb {
         entry.paypalOrderId,
         entry.paypalStatus,
         entry.mandateId ?? null,
+        entry.demo === true ? 1 : 0,
         new Date().toISOString(),
       );
     },
@@ -395,6 +407,21 @@ export function openDb(path: string): CartGuardDb {
       return row.total;
     },
 
+    failStaleRuns(): number {
+      const stale = db
+        .prepare("SELECT id FROM requests WHERE status IN ('queued', 'running')")
+        .all() as Array<{ id: string }>;
+      if (stale.length === 0) return 0;
+      db.prepare("UPDATE requests SET status = 'failed' WHERE status IN ('queued', 'running')").run();
+      for (const row of stale) {
+        db.prepare(
+          `INSERT INTO audit (request_id, step, product_id, merchant, price_usd, verdict, reasons_json, llm_rationale, paypal_order_id, paypal_status, mandate_id, demo, ts)
+           VALUES (?, 'pipeline', NULL, NULL, NULL, 'failed', '[]', ?, NULL, NULL, NULL, 0, ?)`,
+        ).run(row.id, "Server restarted before this run finished.", new Date().toISOString());
+      }
+      return stale.length;
+    },
+
     close(): void {
       db.close();
     },
@@ -415,6 +442,7 @@ function rowToAudit(row: Record<string, unknown>): AuditRow {
     paypalOrderId: row.paypal_order_id === null ? null : String(row.paypal_order_id),
     paypalStatus: row.paypal_status === null ? null : String(row.paypal_status),
     mandateId: row.mandate_id === null || row.mandate_id === undefined ? null : String(row.mandate_id),
+    demo: Number(row.demo ?? 0) === 1,
     ts: String(row.ts),
   };
 }

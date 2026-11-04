@@ -87,6 +87,17 @@ export function AuditGrid({ refreshKey }: { refreshKey: number }) {
         width: 140,
         cellRenderer: VerdictBadgeRenderer,
       },
+      {
+        field: "demo",
+        headerName: "",
+        width: 74,
+        sortable: false,
+        filter: false,
+        cellRenderer: (props: ICellRendererParams<AuditRow, boolean>) =>
+          props.value === true
+            ? '<span class="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">DEMO</span>'
+            : "",
+      },
       { field: "paypalStatus", headerName: "PayPal", width: 130 },
       {
         field: "requestId",

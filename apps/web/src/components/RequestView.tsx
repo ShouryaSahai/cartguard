@@ -83,10 +83,12 @@ function toStoryBeat(entry: { kind: string; text: string }): StoryBeat {
 export function RequestView({
   requestId,
   requestToken,
+  mockMode = false,
   onSettled,
 }: {
   requestId: string;
   requestToken: string;
+  mockMode?: boolean;
   onSettled: () => void;
 }) {
   const [detail, setDetail] = useState<RequestDetail | null>(null);
@@ -308,13 +310,18 @@ export function RequestView({
               every dollar in your wallet.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {request.approvalUrl !== null && (
+              {request.approvalUrl !== null && !mockMode && (
                 <Button
                   variant="outline"
                   onClick={() => window.open(request.approvalUrl ?? "", "_blank")}
                 >
                   Open PayPal sandbox ↗
                 </Button>
+              )}
+              {mockMode && (
+                <span className="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs text-accent">
+                  mock rail — the real PayPal link appears in live mode
+                </span>
               )}
               <Button variant="ok" onClick={() => void decide("approve")} disabled={busy}>
                 {busy ? <Spinner /> : "✓"} Approve

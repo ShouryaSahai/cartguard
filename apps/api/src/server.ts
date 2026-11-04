@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -66,6 +66,11 @@ function hashRequestToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+/** Length-independent constant-time string comparison (hashed to equal length). */
+function safeEqual(a: string, b: string): boolean {
+  return timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
+}
+
 /** Per-request approval secret: only the hash is stored; the plaintext is
  * returned exactly once by POST /requests and required by approve/reject. */
 function authorizeRequestMutation(
@@ -75,7 +80,7 @@ function authorizeRequestMutation(
 ): boolean {
   const stored = db.getRequestApprovalSecretHash(requestId);
   if (stored === null || providedToken === undefined || providedToken === "") return false;
-  return hashRequestToken(providedToken) === stored;
+  return safeEqual(hashRequestToken(providedToken), stored);
 }
 
 /** Per-IP sliding-window limiter for POST /requests. In-memory by design:
@@ -105,6 +110,13 @@ export function createApp(deps: ServerDeps): Express {
   // Behind Render's proxy (and in tests): honor X-Forwarded-For so per-IP
   // rate limiting sees real client IPs.
   app.set("trust proxy", true);
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    next();
+  });
   app.use(express.json());
 
   app.get("/health", (_req, res) => {
@@ -289,7 +301,7 @@ export function createApp(deps: ServerDeps): Express {
       res.status(403).json({ error: "gate_api_not_configured", hint: "set GATE_API_KEY to expose the gate" });
       return;
     }
-    if (req.header("x-api-key") !== gateKey) {
+    if (req.header("x-api-key") === undefined || !safeEqual(req.header("x-api-key") ?? "", gateKey)) {
       res.status(401).json({ error: "unauthorized", hint: "missing or invalid x-api-key" });
       return;
     }
@@ -349,7 +361,7 @@ export function createApp(deps: ServerDeps): Express {
       res.status(403).json({ error: "admin_token_not_configured" });
       return;
     }
-    if (req.header("x-admin-token") !== adminToken) {
+    if (req.header("x-admin-token") === undefined || !safeEqual(req.header("x-admin-token") ?? "", adminToken)) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
@@ -398,7 +410,7 @@ export function createApp(deps: ServerDeps): Express {
       res.status(403).json({ error: "admin_token_not_configured" });
       return;
     }
-    if (req.header("x-admin-token") !== adminToken) {
+    if (req.header("x-admin-token") === undefined || !safeEqual(req.header("x-admin-token") ?? "", adminToken)) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
@@ -432,7 +444,7 @@ export function createApp(deps: ServerDeps): Express {
       res.status(403).json({ error: "admin_token_not_configured" });
       return;
     }
-    if (req.header("x-admin-token") !== adminToken) {
+    if (req.header("x-admin-token") === undefined || !safeEqual(req.header("x-admin-token") ?? "", adminToken)) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
@@ -460,7 +472,7 @@ export function createApp(deps: ServerDeps): Express {
       res.status(403).json({ error: "admin_token_not_configured", hint: "set ADMIN_TOKEN to allow policy writes" });
       return;
     }
-    if (req.header("x-admin-token") !== adminToken) {
+    if (req.header("x-admin-token") === undefined || !safeEqual(req.header("x-admin-token") ?? "", adminToken)) {
       res.status(401).json({ error: "unauthorized", hint: "missing or invalid x-admin-token" });
       return;
     }
@@ -510,6 +522,9 @@ export function main(): void {
       paypal = null;
     }
   }
+  // Runs left behind by a previous process can never finish: mark them failed.
+  const recovered = db.failStaleRuns();
+  if (recovered > 0) console.log(`recovered ${recovered} stale run(s) from a previous process`);
   // Keep the dashboard from looking empty: seed the demo dataset on first
   // boot with an empty audit log (opt-out with CARTGUARD_SEED_DEMO=0).
   if (process.env.CARTGUARD_SEED_DEMO !== "0" && db.listAudit(1).length === 0) {

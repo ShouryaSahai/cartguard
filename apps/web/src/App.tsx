@@ -19,7 +19,7 @@ export function App() {
     const stored = localStorage.getItem("cartguard-theme");
     return stored === "light" ? "light" : "dark";
   });
-  const [health, setHealth] = useState<{ ok: boolean; paypal: string } | null>(null);
+  const [health, setHealth] = useState<{ ok: boolean; mode: "mock" | "live"; paypal: string } | null>(null);
   const [activeRequest, setActiveRequest] = useState<{ id: string; token: string } | null>(null);
   const [auditKey, setAuditKey] = useState(0);
   const [tab, setTab] = useState<Tab>("audit");
@@ -58,6 +58,7 @@ export function App() {
               <RequestView
                 requestId={activeRequest.id}
                 requestToken={activeRequest.token}
+                mockMode={health?.mode === "mock"}
                 onSettled={onSettled}
               />
             )}
