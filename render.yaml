@@ -5,14 +5,12 @@ services:
   - type: web
     name: cartguard
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci && npm run build
     startCommand: npm run start -w @cartguard/api
     healthCheckPath: /health
-    disk:
-      name: cartguard-data
-      mountPath: /var/data
-      sizeGB: 1
+    # Free plan: no persistent disk — DB_PATH stays on /tmp (audit history is
+    # ephemeral across deploys/restarts). Upgrade to starter + disk to persist.
     envVars:
       - key: NODE_VERSION
         value: "26"
@@ -37,4 +35,4 @@ services:
       - key: PUBLIC_BASE_URL
         sync: false
       - key: DB_PATH
-        value: /var/data/cartguard.sqlite
+        value: /tmp/cartguard.sqlite
