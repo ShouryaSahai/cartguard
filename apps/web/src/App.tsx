@@ -51,8 +51,8 @@ export function App() {
         onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
       />
       <main className="mx-auto w-full max-w-7xl space-y-4 px-4 py-6">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="space-y-4">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+          <div className="space-y-4 lg:sticky lg:top-20">
             <NewRequestCard onCreated={(id, token) => setActiveRequest({ id, token })} />
             {activeRequest !== null && (
               <RequestView

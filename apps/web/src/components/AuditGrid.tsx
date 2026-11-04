@@ -28,7 +28,10 @@ function VerdictBadgeRenderer(props: ICellRendererParams<AuditRow, string>) {
           ? "text-danger border-danger/30 bg-danger/10"
           : "text-muted border-border bg-fg/5";
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${toneClass}`}>
+    <span
+      title={verdict}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${toneClass}`}
+    >
       {verdict}
     </span>
   );
@@ -84,7 +87,7 @@ export function AuditGrid({ refreshKey }: { refreshKey: number }) {
       {
         field: "verdict",
         headerName: "Verdict",
-        width: 140,
+        width: 152,
         cellRenderer: VerdictBadgeRenderer,
       },
       {

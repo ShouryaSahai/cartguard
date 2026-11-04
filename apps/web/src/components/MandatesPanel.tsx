@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Mandate } from "../lib/api";
 import { api } from "../lib/api";
+import { AdminTokenDialog } from "./AdminTokenDialog";
 import { Badge, Button, Card, CardBody, CardHeader, ErrorBanner, Input, Spinner, type Tone } from "./ui";
 
 // Spending mandates: budget, expiry, allowlists, max items. One-click revoke,
@@ -8,18 +9,11 @@ import { Badge, Button, Card, CardBody, CardHeader, ErrorBanner, Input, Spinner,
 
 const ADMIN_TOKEN_KEY = "cartguard-admin-token";
 
-function adminToken(): string {
-  const stored = sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? "";
-  if (stored !== "") return stored;
-  const entered = window.prompt("Enter the admin token (ADMIN_TOKEN):") ?? "";
-  if (entered.trim() !== "") sessionStorage.setItem(ADMIN_TOKEN_KEY, entered.trim());
-  return entered.trim();
-}
-
 export function MandatesPanel({ refreshKey }: { refreshKey: number }) {
   const [mandates, setMandates] = useState<Mandate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tokenDialogFor, setTokenDialogFor] = useState<null | { action: "create" } | { action: "revoke"; mandateId: string }>(null);
 
   const [budget, setBudget] = useState("100");
   const [expiresAt, setExpiresAt] = useState("");
@@ -40,10 +34,10 @@ export function MandatesPanel({ refreshKey }: { refreshKey: number }) {
     void load();
   }, [load, refreshKey]);
 
-  async function create() {
-    const token = adminToken();
+  async function create(tokenArg?: string) {
+    const token = tokenArg ?? sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? "";
     if (token === "") {
-      setError("Creating a mandate requires an admin token.");
+      setTokenDialogFor({ action: "create" });
       return;
     }
     setBusy(true);
@@ -66,10 +60,10 @@ export function MandatesPanel({ refreshKey }: { refreshKey: number }) {
     }
   }
 
-  async function revoke(id: string) {
-    const token = adminToken();
+  async function revoke(id: string, tokenArg?: string) {
+    const token = tokenArg ?? sessionStorage.getItem(ADMIN_TOKEN_KEY) ?? "";
     if (token === "") {
-      setError("Revoking a mandate requires an admin token.");
+      setTokenDialogFor({ action: "revoke", mandateId: id });
       return;
     }
     setBusy(true);
@@ -85,6 +79,21 @@ export function MandatesPanel({ refreshKey }: { refreshKey: number }) {
 
   return (
     <div className="space-y-4">
+      {tokenDialogFor !== null && (
+        <AdminTokenDialog
+          onClose={() => {
+            setTokenDialogFor(null);
+            setError("Admin token required — nothing changed.");
+          }}
+          onSubmit={(token) => {
+            sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+            const pending = tokenDialogFor;
+            setTokenDialogFor(null);
+            if (pending.action === "create") void create(token);
+            else void revoke(pending.mandateId, token);
+          }}
+        />
+      )}
       <Card>
         <CardHeader className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Spending mandates</h2>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PolicyConfig } from "@cartguard/shared";
 import { api } from "../lib/api";
+import { AdminTokenDialog } from "./AdminTokenDialog";
 import { Button, Card, CardBody, CardHeader, ErrorBanner, Input, Spinner } from "./ui";
 
 function csv(value: string): string[] {
@@ -19,6 +20,7 @@ export function PolicyEditor() {
   const [busy, setBusy] = useState(false);
   const [replays, setReplays] = useState<Array<{ requestId: string; oldVerdict: string; newVerdict: string; changed: boolean; skipped?: string }> | null>(null);
   const [replayBusy, setReplayBusy] = useState(false);
+  const [tokenDialogFor, setTokenDialogFor] = useState<null | "save" | "replay">(null);
 
   useEffect(() => {
     void (async () => {
@@ -33,16 +35,12 @@ export function PolicyEditor() {
     })();
   }, []);
 
-  async function save() {
+  async function save(tokenArg?: string) {
     if (config === null) return;
-    let adminToken = sessionStorage.getItem("cartguard-admin-token") ?? "";
+    const adminToken = tokenArg ?? sessionStorage.getItem("cartguard-admin-token") ?? "";
     if (adminToken === "") {
-      const entered = window.prompt("Enter the admin token (ADMIN_TOKEN) to save the policy:");
-      if (entered === null || entered.trim() === "") {
-        setError("Saving the policy requires an admin token.");
-        return;
-      }
-      adminToken = entered.trim();
+      setTokenDialogFor("save");
+      return;
     }
     setBusy(true);
     setSaved(false);
@@ -80,8 +78,53 @@ export function PolicyEditor() {
     );
   }
 
+  async function replay(tokenArg?: string) {
+    if (config === null) return;
+    const adminToken = tokenArg ?? sessionStorage.getItem("cartguard-admin-token") ?? "";
+    if (adminToken === "") {
+      setTokenDialogFor("replay");
+      return;
+    }
+    setReplayBusy(true);
+    try {
+      const draft = {
+        ...config,
+        allowlistMerchants: csv(merchants),
+        blocklistCategories: csv(categories),
+      };
+      setReplays((await api.replayPolicy(draft, adminToken)).replays);
+      setError(null);
+    } catch (cause: unknown) {
+      const message = cause instanceof Error ? cause.message : "Replay failed";
+      if (message.includes("401") || message.includes("403")) {
+        sessionStorage.removeItem("cartguard-admin-token");
+        setError("Admin token missing or invalid — nothing was replayed.");
+      } else {
+        setError(message);
+      }
+    } finally {
+      setReplayBusy(false);
+    }
+  }
+
   return (
-    <Card>
+    <div className="space-y-4">
+      {tokenDialogFor !== null && (
+        <AdminTokenDialog
+          onClose={() => {
+            setTokenDialogFor(null);
+            setError("Admin token required — nothing was saved.");
+          }}
+          onSubmit={(token) => {
+            sessionStorage.setItem("cartguard-admin-token", token);
+            const action = tokenDialogFor;
+            setTokenDialogFor(null);
+            if (action === "save") void save(token);
+            else void replay(token);
+          }}
+        />
+      )}
+      <Card>
       <CardHeader className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">Policy — what the gate enforces</h2>
         {saved && <span className="text-xs text-ok">saved ✓</span>}
@@ -153,5 +196,6 @@ export function PolicyEditor() {
         </Button>
       </CardBody>
     </Card>
+    </div>
   );
 }

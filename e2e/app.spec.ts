@@ -26,16 +26,20 @@ test.describe.serial("CartGuard end-to-end", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Policy editor" }).click();
 
-    // No token: dismissing the prompt must produce a clear error and no save.
-    page.once("dialog", (dialog) => void dialog.dismiss());
+    // No token: cancelling the admin-token modal must produce a clear error
+    // and no save.
     await page.locator('button:has-text("Save policy")').click();
-    await expect(page.getByText("Saving the policy requires an admin token.")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Admin token required" })).toBeVisible();
+    await page.locator('div[role="dialog"] button:has-text("Cancel")').click();
+    await expect(page.getByText("Admin token required — nothing was saved.")).toBeVisible();
     await page.screenshot({ path: "docs/screenshots/policy-editor-no-token.png", fullPage: true });
 
-    // With the token: the value persists and the editor confirms the save.
-    page.once("dialog", (dialog) => void dialog.accept("e2e-admin"));
+    // With the token: fill the new cap FIRST, then authenticate — one
+    // deterministic save (asserting saved ✓ twice would race the page close).
     await page.locator('label:has-text("Per-purchase cap") input').fill("20");
     await page.locator('button:has-text("Save policy")').click();
+    await page.locator('input[aria-label="admin token"]').fill("e2e-admin");
+    await page.locator('div[role="dialog"] button:has-text("Continue")').click();
     await expect(page.getByText("saved ✓")).toBeVisible();
     await page.screenshot({ path: "docs/screenshots/policy-editor-saved.png", fullPage: true });
   });
