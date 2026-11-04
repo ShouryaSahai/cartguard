@@ -1,5 +1,7 @@
 # CartGuard — the trust layer for agent payments
 
+[![CI](https://github.com/ShouryaSahai/cartguard/actions/workflows/ci.yml/badge.svg)](https://github.com/ShouryaSahai/cartguard/actions/workflows/ci.yml)
+
 > Agents can spend money. CartGuard is what makes that safe.
 
 CartGuard is a shopping agent that can pay with PayPal — **but only inside rules the user controls**.
@@ -46,6 +48,18 @@ flowchart TB
       GATEAPI --> GATE
     end
 ```
+
+## Screenshots
+
+| Auto-pay verdict | Insights (spend + verdicts) |
+| --- | --- |
+| ![Auto-pay path with captured payment](docs/screenshots/path-auto-pay.png) | ![Insights charts](docs/screenshots/insights-1440.png) |
+
+| Approval flow | Audit grid |
+| --- | --- |
+| ![Needs approval with reasons](docs/screenshots/path-needs-approval.png) | ![Audit log with verdict badges](docs/screenshots/audit-grid.png) |
+
+More: `docs/screenshots/` (blocked path, policy editor, 375/768/1440 responsive evidence).
 
 ## Trust boundaries (the core of the pitch)
 
